@@ -36,6 +36,14 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number | null>(null);
+
+  const clearTimer = () => {
+    if (intervalRef.current !== null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -85,14 +93,20 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isRunning) {
       const next = (phase === 'focus' ? focusLen : breakLen) * 60;
       setRemainingSec(next);
+      lastTickRef.current = null;
     }
-    return () => { if (intervalRef.current) window.clearInterval(intervalRef.current); };
+    return () => {
+      clearTimer();
+      lastTickRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, focusLen, breakLen]);
 
   const start = async () => {
     if (!activeCard || isRunning) return;
     setIsRunning(true);
+    clearTimer();
+    lastTickRef.current = Date.now();
     if (!sessionId) {
       try {
         const res = await axios.post(`${API_URL}/timer-sessions`, {
@@ -108,24 +122,30 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     intervalRef.current = window.setInterval(() => {
       setRemainingSec((sec) => {
-        if (sec <= 1) {
-          window.clearInterval(intervalRef.current!);
+        const now = Date.now();
+        const last = lastTickRef.current ?? now;
+        const delta = (now - last) / 1000;
+        lastTickRef.current = now;
+        if (sec <= delta) {
+          clearTimer();
           handlePhaseComplete();
           return 0;
         }
-        return sec - 1;
+        return sec - delta;
       });
-    }, 1000);
+    }, 250);
   };
 
   const pause = () => {
-    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    clearTimer();
     setIsRunning(false);
+    lastTickRef.current = null;
   };
 
   const stop = async () => {
-    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    clearTimer();
     setIsRunning(false);
+    lastTickRef.current = null;
     const total = (phase === 'focus' ? focusLen : breakLen) * 60;
     if (sessionId) {
       try {
@@ -141,6 +161,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const handlePhaseComplete = async () => {
+    lastTickRef.current = null;
     if (phase === 'focus') {
       if (sessionId) {
         try {
@@ -178,6 +199,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setPhase('focus');
     setIsRunning(false);
     setRemainingSec(f * 60);
+    lastTickRef.current = null;
   };
 
   const value: PomodoroContextValue = {
