@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+
 import { DragDropContext, Droppable, DropResult } from 'react-beautiful-dnd';
-import { List, Card as CardType, User } from '../types/data';
+import { Card as CardType, User } from '../types/data';
 import Card from './Card';
 import './KanbanBoard.css';
 import { useLists } from '../hooks/useLists';
 import { useCards } from '../hooks/useCards';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingOverlay from './LoadingOverlay';
-
-const API_URL = 'http://localhost:3001/api';
+import { useToast } from '../context/ToastContext';
 
 interface KanbanBoardProps {
   boardId: string;
@@ -126,47 +125,46 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ boardId, users, onStartFocus,
             type="text"
             placeholder="Buscar…"
             value={filters?.q || ''}
-            onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false,overdue:false,hasAttachments:false,q:''}), q: e.target.value })}
+            onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), q: e.target.value })}
             style={{ padding:'6px 8px', borderRadius:8, border:'1px solid var(--color-border)', background:'var(--color-surface-2)', color:'var(--color-text)' }}
             ref={searchRef}
           />
           {users.length > 1 && (
             <select
               value={filters?.assignedUserId || ''}
-              onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,assignedUserId:'',dueToday:false,noDueDate:false,overdue:false,hasAttachments:false,q:''}), assignedUserId: e.target.value })}
-              style={{ padding:'6px 8px', borderRadius:8, border:'1px solid var(--color-border)', background:'var(--color-surface-2)', color:'var(--color-text)' }}
+              onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), assignedUserId: e.target.value })}
             >
               <option value="">Todos</option>
               {users.map(u => (<option key={u.userId} value={u.userId}>{u.name}</option>))}
             </select>
           )}
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false}), assignedToMe: !filters?.assignedToMe })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), assignedToMe: !filters?.assignedToMe })}
             className="filter-chip"
             style={{ opacity: filters?.assignedToMe ? 1 : 0.6 }}
           >Asignadas a mí</button>
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false}), dueToday: !filters?.dueToday })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), dueToday: !filters?.dueToday })}
             className="filter-chip"
             style={{ opacity: filters?.dueToday ? 1 : 0.6 }}
           >Vencen hoy</button>
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false}), noDueDate: !filters?.noDueDate })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), noDueDate: !filters?.noDueDate })}
             className="filter-chip"
             style={{ opacity: filters?.noDueDate ? 1 : 0.6 }}
           >Sin fecha</button>
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false,overdue:false,hasAttachments:false,q:''}), overdue: !filters?.overdue })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), overdue: !filters?.overdue })}
             className="filter-chip"
             style={{ opacity: filters?.overdue ? 1 : 0.6 }}
           >Vencidas</button>
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false,overdue:false,hasAttachments:false,q:''}), hasAttachments: !filters?.hasAttachments })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), hasAttachments: !filters?.hasAttachments })}
             className="filter-chip"
             style={{ opacity: filters?.hasAttachments ? 1 : 0.6 }}
           >Con adjuntos</button>
           <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{assignedToMe:false,dueToday:false,noDueDate:false,overdue:false,hasAttachments:false,showArchived:false,q:''}), showArchived: !filters?.showArchived })}
+            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), showArchived: !filters?.showArchived })}
             className="filter-chip"
             style={{ opacity: filters?.showArchived ? 1 : 0.6 }}
           >Archivadas</button>
@@ -256,6 +254,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ boardId, users, onStartFocus,
                       onEditCard={onEditCard}
                       onStartFocus={onStartFocus}
                       onToggleComplete={toggleComplete}
+                      onArchiveToggle={toggleArchive}
                     />
                   ))}
                   {provided.placeholder}
@@ -326,11 +325,9 @@ interface AddCardFormProps {
   ) => void;
   defaultAssignedToUserId?: string;
   currentUserId?: string;
-  filters?: { assignedToMe: boolean; assignedUserId?: string; dueToday: boolean; noDueDate: boolean; overdue: boolean; hasAttachments: boolean; q: string };
-  onChangeFilters?: (f: { assignedToMe: boolean; assignedUserId?: string; dueToday: boolean; noDueDate: boolean; overdue: boolean; hasAttachments: boolean; q: string }) => void;
+  filters?: { assignedToMe: boolean; assignedUserId?: string; dueToday: boolean; noDueDate: boolean; overdue: boolean; hasAttachments: boolean; showArchived: boolean; q: string };
+  onChangeFilters?: (f: { assignedToMe: boolean; assignedUserId?: string; dueToday: boolean; noDueDate: boolean; overdue: boolean; hasAttachments: boolean; showArchived: boolean; q: string }) => void;
 }
-
-import { useToast } from '../context/ToastContext';
 
 const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, defaultAssignedToUserId, currentUserId, filters, onChangeFilters }) => {
   const [newCardTitle, setNewCardTitle] = useState('');
@@ -378,21 +375,5 @@ const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, def
       <button onClick={onAddCard} disabled={adding}>{adding ? 'Añadiendo…' : '+ Añadir Tarjeta'}</button>
     </div>
   );
-  const ensureDoneList = async (): Promise<string | null> => {
-    const existing = lists.find(l => l.name.toLowerCase() === 'hecho');
-    if (existing) return existing.listId;
-    const created = await handleCreateList('Hecho');
-    return created ? created.listId : null;
-  };
-
-  const toggleComplete = async (card: CardType) => {
-    if (!card.completed) {
-      const doneListId = await ensureDoneList();
-      const payload: Partial<CardType> = { completed: true, completedAt: new Date() } as any;
-      if (doneListId) (payload as any).listId = doneListId;
-      await handleUpdateCard(card.id, payload);
-    } else {
-      await handleUpdateCard(card.id, { completed: false, completedAt: null as any });
-    }
-  };
+  
 };

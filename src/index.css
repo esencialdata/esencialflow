@@ -12,8 +12,8 @@
   --color-text-light: #ffffff;
 
   /* Borders & shadows */
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-light: rgba(255, 255, 255, 0.14);
+  --color-border: var(--color-surface-2);
+  --color-border-light: var(--color-surface-3);
   --color-shadow-light: rgba(0, 0, 0, 0.25);
 
   /* Accents */
@@ -22,7 +22,7 @@
   --color-accent-magenta: #d36bff;
 
   /* Cards */
-  --color-background-card: rgba(255, 255, 255, 0.06);
+  --color-background-card: var(--color-surface-1);
 }
 
 html, body, #root {

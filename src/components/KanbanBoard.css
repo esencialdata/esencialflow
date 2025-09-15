@@ -94,3 +94,19 @@
 
 .add-card-form { display: flex; gap: 8px; }
 .add-card-form input { flex: 1; }
+
+/* Custom Scrollbar Styles */
+.cards-container::-webkit-scrollbar {
+  width: 12px;
+}
+
+.cards-container::-webkit-scrollbar-track {
+  background: var(--color-surface-1);
+  border-radius: 10px;
+}
+
+.cards-container::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface-3);
+  border-radius: 10px;
+  border: 3px solid var(--color-surface-1);
+}

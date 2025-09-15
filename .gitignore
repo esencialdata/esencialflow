@@ -17,3 +17,4 @@
 
 # OS-specific
 .DS_Store
+.vercel

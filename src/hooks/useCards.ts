@@ -90,10 +90,8 @@ export const useCards = (boardId: string | null) => {
       setCardsByList(prev => {
         // Remove from any list where it exists
         const next: Record<string, Card[]> = {};
-        let found = false;
         Object.keys(prev).forEach(listId => {
           const filtered = (prev[listId] || []).filter(c => c.id !== updated.id);
-          if (filtered.length !== (prev[listId] || []).length) found = true;
           next[listId] = filtered;
         });
         // Insert into its (possibly new) list

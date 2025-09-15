@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { Card } from '../types/data';
 
@@ -35,7 +35,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [focusLen, setFocusLen] = useState<number>(defaultFocus);
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const intervalRef = useRef<number | null>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -80,19 +80,71 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     playBeep();
   };
 
+  const handlePhaseComplete = useCallback(async () => {
+    setIsRunning(false);
+    if (phase === 'focus') {
+      if (sessionId) {
+        try {
+          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
+        } catch (e) {
+          console.error('Failed to complete timer session', e);
+        } finally {
+          setSessionId(null);
+        }
+      }
+      await notify('Focus terminado', 'Buen trabajo. Toma un descanso.');
+      setPhase('break');
+      setRemainingSec(breakLen * 60);
+    } else { // phase === 'break'
+      if (sessionId) {
+        try {
+          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: breakLen });
+        } catch (e) {
+          console.error('Failed to complete break session', e);
+        } finally {
+          setSessionId(null);
+        }
+      }
+      await notify('Descanso terminado', 'Volvamos al enfoque.');
+      setPhase('focus');
+      setRemainingSec(focusLen * 60);
+    }
+  }, [phase, sessionId, focusLen, breakLen, notify]);
+
   useEffect(() => {
-    // reset countdown when lengths or phase change (not while running)
+    const worker = new Worker('/pomodoro-worker.js');
+    workerRef.current = worker;
+
+    worker.onmessage = (e: MessageEvent) => {
+      const { type, remainingSeconds } = e.data;
+      if (type === 'tick') {
+        setRemainingSec(remainingSeconds);
+      } else if (type === 'done') {
+        handlePhaseComplete();
+      }
+    };
+
+    worker.onerror = (e: ErrorEvent) => {
+      console.error('[CONTEXT] Error in Pomodoro worker:', e);
+    };
+
+    return () => {
+      worker.terminate();
+    };
+  }, []); // Simplified dependency array
+
+  useEffect(() => {
     if (!isRunning) {
       const next = (phase === 'focus' ? focusLen : breakLen) * 60;
       setRemainingSec(next);
     }
-    return () => { if (intervalRef.current) window.clearInterval(intervalRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, focusLen, breakLen]);
+  }, [phase, focusLen, breakLen, isRunning]);
 
   const start = async () => {
     if (!activeCard || isRunning) return;
     setIsRunning(true);
+    workerRef.current?.postMessage({ command: 'start', seconds: remainingSec });
+
     if (!sessionId) {
       try {
         const res = await axios.post(`${API_URL}/timer-sessions`, {
@@ -106,26 +158,16 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.error('Failed to create timer session', e);
       }
     }
-    intervalRef.current = window.setInterval(() => {
-      setRemainingSec((sec) => {
-        if (sec <= 1) {
-          window.clearInterval(intervalRef.current!);
-          handlePhaseComplete();
-          return 0;
-        }
-        return sec - 1;
-      });
-    }, 1000);
   };
 
   const pause = () => {
-    if (intervalRef.current) window.clearInterval(intervalRef.current);
     setIsRunning(false);
+    workerRef.current?.postMessage({ command: 'pause' });
   };
 
   const stop = async () => {
-    if (intervalRef.current) window.clearInterval(intervalRef.current);
     setIsRunning(false);
+    workerRef.current?.postMessage({ command: 'stop' });
     const total = (phase === 'focus' ? focusLen : breakLen) * 60;
     if (sessionId) {
       try {
@@ -140,44 +182,12 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setRemainingSec((phase === 'focus' ? focusLen : breakLen) * 60);
   };
 
-  const handlePhaseComplete = async () => {
-    if (phase === 'focus') {
-      if (sessionId) {
-        try {
-          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
-        } catch (e) {
-          console.error('Failed to complete timer session', e);
-        } finally {
-          setSessionId(null);
-        }
-      }
-      await notify('Focus terminado', 'Buen trabajo. Toma un descanso.');
-      setPhase('break');
-      setIsRunning(false);
-      setRemainingSec(breakLen * 60);
-    } else {
-      if (sessionId) {
-        try {
-          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: breakLen });
-        } catch (e) {
-          console.error('Failed to complete break session', e);
-        } finally {
-          setSessionId(null);
-        }
-      }
-      await notify('Descanso terminado', 'Volvamos al enfoque.');
-      setPhase('focus');
-      setIsRunning(false);
-      setRemainingSec(focusLen * 60);
-    }
-  };
-
   const setPreset = (f: number, b: number) => {
+    setIsRunning(false);
+    workerRef.current?.postMessage({ command: 'stop' });
     setFocusLen(f);
     setBreakLen(b);
     setPhase('focus');
-    setIsRunning(false);
-    setRemainingSec(f * 60);
   };
 
   const value: PomodoroContextValue = {
@@ -203,4 +213,3 @@ export const usePomodoro = () => {
   if (!ctx) throw new Error('usePomodoro must be used within PomodoroProvider');
   return ctx;
 };
-

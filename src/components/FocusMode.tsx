@@ -9,7 +9,7 @@ interface FocusModeProps {
 }
 
 const FocusMode: React.FC<FocusModeProps> = ({ card, onClose }) => {
-  const { activeCard, setActiveCard, isRunning, phase, focusLen, breakLen, mmss, start, pause, stop, setPreset } = usePomodoro();
+  const { activeCard, setActiveCard, isRunning, phase, mmss, start, pause, stop, setPreset } = usePomodoro();
 
   if (!card) return null;
 
