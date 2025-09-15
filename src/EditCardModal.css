@@ -1,0 +1,42 @@
+.edit-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.checklist-section {
+  margin-top: 1rem;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 1rem;
+}
+
+.checklist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checklist-item .completed {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.remove-item-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.add-checklist-item {
+  display: flex;
+  gap: 0.5rem;
+}

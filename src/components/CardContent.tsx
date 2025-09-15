@@ -1,0 +1,71 @@
+import React from 'react';
+import { Card as CardType, User } from '../types/data';
+import './Card.css';
+
+interface CardContentProps {
+  card: CardType;
+  users: User[];
+  onClick: (e: React.MouseEvent) => void;
+  onStartFocus: (e: React.MouseEvent) => void;
+}
+
+const getUserInitials = (name: string) => {
+  const names = name.split(' ');
+  if (names.length > 1) {
+    return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+};
+
+const generateColorFromId = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = hash % 360;
+  const s = 70;
+  const l = 45;
+  return `hsl(${h}, ${s}%, ${l}%)`;
+};
+
+const getChecklistProgress = (card: CardType) => {
+  if (!card.checklist || card.checklist.length === 0) {
+    return null;
+  }
+  const completed = card.checklist.filter(item => item.completed).length;
+  return { completed, total: card.checklist.length };
+};
+
+const CardContent: React.FC<CardContentProps> = ({ card, users, onClick, onStartFocus }) => {
+  const assignedUser = users.find(u => u.userId === card.assignedToUserId);
+  const checklistProgress = getChecklistProgress(card);
+  const toLocalDateOnly = (d: Date | string) => { const dt = new Date(d); return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0,0,0,0); };
+  const today = toLocalDateOnly(new Date());
+  const isOverdue = !!card.dueDate && toLocalDateOnly(card.dueDate) < today;
+
+  return (
+    <div className="card" onClick={onClick}>
+      <p>{card.title}</p>
+      <div className="card-footer">
+        <div className="card-meta">
+          {checklistProgress && checklistProgress.total > 0 && (
+            <div className="card-checklist-progress" title={`${checklistProgress.completed} de ${checklistProgress.total} completadas`}>
+              <span className="icon">✅</span>
+              {checklistProgress.completed}/{checklistProgress.total}
+            </div>
+          )}
+          {card.dueDate && (
+            <div className={`card-due-date${isOverdue ? ' overdue' : ''}`} title={isOverdue ? 'Vencida' : 'Fecha'}>
+              <span className="icon">{isOverdue ? '⚠️' : '📅'}</span>
+              {new Date(card.dueDate).toLocaleDateString()}
+            </div>
+          )}
+          {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name)}</div>}
+        </div>
+        <button className="focus-button" onClick={onStartFocus}>Focus</button>
+      </div>
+    </div>
+  );
+};
+
+export default CardContent;

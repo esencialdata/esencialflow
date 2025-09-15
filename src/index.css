@@ -1,0 +1,72 @@
+:root {
+  /* Surface + background */
+  --color-bg: #0e1116;
+  --color-surface-1: #141821;
+  --color-surface-2: #1a1f2b;
+  --color-surface-3: #1f2532;
+
+  /* Text */
+  --color-text: #e8eef5;
+  --color-text-muted: #a6b0bf;
+  --color-text-dark: #e6ebf3;
+  --color-text-light: #ffffff;
+
+  /* Borders & shadows */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-light: rgba(255, 255, 255, 0.14);
+  --color-shadow-light: rgba(0, 0, 0, 0.25);
+
+  /* Accents */
+  --color-accent-green: #35d49a;
+  --color-accent-blue: #5ca3ff;
+  --color-accent-magenta: #d36bff;
+
+  /* Cards */
+  --color-background-card: rgba(255, 255, 255, 0.06);
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 80% -100px, #1a2030 0%, var(--color-bg) 55%);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Generic controls */
+button {
+  background: var(--color-surface-3);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+button:hover { background: #2a3242; }
+button:active { transform: translateY(1px); }
+
+input, select, textarea {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+input::placeholder { color: var(--color-text-muted); }
+
+.error-message {
+  color: #ff8080;
+}

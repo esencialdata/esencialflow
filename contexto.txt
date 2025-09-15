@@ -1,0 +1,223 @@
+Informe de Estado del Proyecto Esencial Flow - 10 de Septiembre de 2025
+
+Agente Encargado: Gemini CLI
+
+---
+
+### **1. Estado Inicial del Proyecto**
+
+Al inicio de la interacción, el proyecto "Esencial Flow" presentaba una estructura de aplicación web full-stack (frontend y backend) con las siguientes características:
+
+*   **Frontend:** Basado en React y TypeScript, utilizando Vite como herramienta de compilación. Se identificaron componentes relacionados con un tablero Kanban (Card, KanbanBoard), modos de productividad (MyDay, FocusMode) e integraciones (ZapierIntegration).
+*   **Backend:** Implementado con Node.js y TypeScript, utilizando Express.js para la API y Firebase Admin para la interacción con Firebase (Firestore, Storage).
+*   **Problemas Iniciales Identificados:**
+    *   **Dependencia `firebase-admin` en el Frontend:** Un riesgo de seguridad crítico, ya que exponía credenciales de administrador de Firebase en el cliente.
+    *   **Estructura de Archivos Inconsistente:** Componentes y hooks dispersos entre la raíz del proyecto y la carpeta `src/components`, causando problemas de importación.
+    *   **Archivos de Componentes Vacíos/Corruptos:** `EditCardModal.tsx`, `CreateBoardModal.tsx`, `EditBoardModal.tsx`, `useBoards.ts`, `useCards.ts` estaban vacíos o con sintaxis rota.
+    *   **Errores de Linting:** Uso de `require` en lugar de `import`, variables no utilizadas, uso de `any`.
+    *   **Errores de Compilación (TypeScript):** Módulos no encontrados, tipos implícitos `any`, y otros errores de tipado.
+
+---
+
+### **2. Acciones Realizadas (Detalle Cronológico)**
+
+Se realizaron las siguientes intervenciones para estabilizar y hacer funcional el proyecto:
+
+1.  **Corrección de Seguridad Crítica (`firebase-admin`):**
+    *   Se movió la dependencia `firebase-admin` del `package.json` raíz (frontend) al `package.json` del `backend/`.
+    *   Se ejecutó `npm install` en ambos directorios para actualizar las dependencias.
+
+2.  **Eliminación de Carpeta `frontend/` Duplicada:**
+    *   Se identificó y eliminó la carpeta `frontend/` (que contenía una configuración de Create React App aparentemente obsoleta) para simplificar la estructura del proyecto.
+
+3.  **Reestructuración de Archivos Fuente:**
+    *   Se creó la carpeta `src/hooks/`.
+    *   Se movieron los hooks `useBoards.ts` y `useCards.ts` de la raíz a `src/hooks/`.
+    *   Se movieron los componentes `Card.tsx`, `Card.css`, `CreateBoardModal.tsx`, `EditBoardModal.tsx`, `EditCardModal.tsx`, `EditCardModal.css` de la raíz a `src/components/`.
+
+4.  **Reconstrucción y Corrección de Archivos Clave:**
+    *   **`EditCardModal.tsx`:** Se reconstruyó completamente el componente `EditCardModal.tsx` (y su `EditCardModal.css`) basándose en la interfaz `Card` de `src/types/data.ts`, corrigiendo un error de sintaxis crítico y añadiendo la lógica de formulario.
+    *   **`useBoards.ts` y `useCards.ts`:** Se generó e implementó el código básico para estos hooks, incluyendo la gestión de estado y la comunicación con la API del backend.
+    *   **`CreateBoardModal.tsx` y `EditBoardModal.tsx`:** Se generó e implementó el código básico para estos componentes modales, utilizando las clases CSS de modal existentes.
+    *   **`FocusMode.tsx`:** Se reescribió completamente este componente (y se creó `FocusMode.css`) para que cumpliera su función de "modo foco" en lugar de ser una copia de `KanbanBoard.tsx`.
+
+5.  **Corrección de Errores de Linting y Compilación (TypeScript):**
+    *   **Configuración de ESLint:** Se creó un archivo `.eslintrc.cjs` estándar para React/TypeScript/Vite, permitiendo que el linter funcionara.
+    *   **`backend/src/index.ts`:**
+        *   Se cambió la importación de `serviceAccountKey.json` de `require` a `import`.
+        *   Se añadió una aserción de tipo (`as admin.ServiceAccount`) para `serviceAccount` en la inicialización de Firebase Admin, resolviendo un error de tipado.
+    *   **`App.tsx`:**
+        *   Se eliminó la importación innecesaria de `React` (TS6133).
+        *   Se corrigió la importación del tipo `Board` que no se utilizaba.
+        *   Se añadió la propiedad `isOpen` al componente `EditCardModal` para controlar su visibilidad.
+    *   **`KanbanBoard.tsx`:** Se eliminó la importación de `Draggable` que no se utilizaba directamente en el archivo.
+    *   **`ZapierIntegration.tsx`:** Se definió y utilizó una `interface Webhook` en `src/types/data.ts` para reemplazar el uso de `any[]` en el estado de `webhooks`, mejorando la seguridad de tipos.
+    *   **`EditCardModal.tsx` (post-reconstrucción):** Se corrigieron las rutas de importación internas y se renombró la propiedad `onSave` a `onSubmit` para consistencia.
+    *   **`backend/tsconfig.json`:** Se añadió la opción `"resolveJsonModule": true` para permitir la importación de archivos JSON.
+
+---
+
+### **3. Estado Actual del Proyecto**
+
+*   **Compilación Exitosa:** Tanto el frontend como el backend compilan sin errores.
+*   **Estructura Consistente:** Todo el código fuente reside ahora en la carpeta `src/`, con `src/components/` para componentes y `src/hooks/` para hooks.
+*   **Código Limpio:** El linter se ejecuta sin errores (aunque no se abordaron todos los `implicit any` que el compilador no falló).
+*   **Funcionalidad Básica (Compilación):** El proyecto es técnicamente funcional desde la perspectiva de la compilación.
+
+---
+
+### **4. Tareas Pendientes y Próximos Pasos**
+
+Para el próximo agente o para continuar el desarrollo, aquí hay una lista de tareas y consideraciones:
+
+1.  **Verificación de Funcionalidad en Tiempo de Ejecución:**
+    *   Iniciar el backend: `npm run serve --prefix backend`
+    *   Iniciar el frontend: `npm run dev`
+    *   Probar todas las funcionalidades de la UI (crear/editar/eliminar tableros, tarjetas, arrastrar y soltar, modo foco, mi día, integración Zapier).
+
+2.  **Implementación de Lógica Faltante:**
+    *   **`CreateBoardModal.tsx` y `EditBoardModal.tsx`:** Se crearon scaffolds básicos. Es posible que necesiten lógica adicional o validaciones según el PRD.
+    *   **`FocusMode.tsx`:** Se implementó una versión básica. Podría requerir más detalles o interacciones según el diseño final.
+    *   **`Card.tsx`:** Aunque se movió, su contenido no fue revisado a fondo. Podría necesitar ajustes o la implementación de `Draggable` si no lo tiene.
+    *   **`MyDay.tsx`, `CalendarView.tsx`, `ZapierIntegration.tsx`:** Estos componentes existen, pero su lógica interna y su integración completa con la API no fueron verificadas más allá de la compilación.
+
+3.  **Optimización y Calidad de Código:**
+    *   **Advertencia de Tamaño de Chunks (Frontend):** La compilación del frontend emite una advertencia sobre el tamaño de los chunks. Considerar la división de código (`code-splitting`) para mejorar el rendimiento de carga.
+    *   **Vulnerabilidades de `npm`:** Ejecutar `npm audit fix` para abordar las vulnerabilidades de seguridad reportadas en las dependencias.
+    *   **Errores `implicit any`:** Aunque el compilador no falló, es posible que queden más errores de `implicit any` en el código. Se recomienda revisar el código y añadir tipado explícito donde sea necesario para maximizar los beneficios de TypeScript.
+
+4.  **Revisión del PRD (`PRD_Esencial_Flow.md`):**
+    *   Leer y comprender a fondo el documento de requerimientos para identificar funcionalidades no implementadas o parcialmente implementadas.
+
+5.  **Pruebas:**
+    *   Implementar o expandir pruebas unitarias y de integración para asegurar la robustez del código y prevenir regresiones.
+
+---
+
+Este informe proporciona un contexto completo de las acciones realizadas y el estado actual del proyecto, así como una hoja de ruta clara para el desarrollo futuro.
+
+---
+========================================
+REPORTE DE CAMBIOS Y ESTADO (11-Sep-2025)
+========================================
+
+Resumen Ejecutivo
+- Se dejó operativo el flujo clave del MVP: tableros/listas/tarjetas con DnD y orden persistente, fechas normalizadas (Mi Día/Calendario), Focus/Pomodoro en segundo plano, comentarios con @menciones, adjuntos (subir/abrir/eliminar), y mejoras UX (toasts, spinners, confirmaciones).
+
+Cómo correr (local)
+- Backend: `npm run build --prefix backend` y luego `npm run serve --prefix backend` → http://localhost:3001
+- Frontend: `npm run dev` → http://localhost:5173
+- Variables fijas en código: API base en `http://localhost:3001/api` (frontend)
+
+Storage (GCS) para adjuntos
+- Bucket usado: `esencial-flow-uploads-1234` (proyecto: esencial-flow)
+- CORS aplicado (GET/PUT/OPTIONS y origins localhost:5173, 127.0.0.1:5173)
+- IAM: rol `roles/storage.objectAdmin` concedido al SA que firma URLs: `firebase-adminsdk-fbsvc@esencialflow.iam.gserviceaccount.com`
+- Backend firma URL de subida V4 sin contentType y genera URL firmada de lectura para abrir adjuntos sin hacerlos públicos.
+
+Cambios en Backend (archivo principal: backend/src/index.ts)
+- Puerto backend fijado en 3001.
+- Ajuste Firestore timestamp:
+  - Conversión robusta de fechas (dueDate) a `Timestamp` en POST/PUT/PATCH de tarjetas/lists.
+- Boards/Lists/Cards:
+  - GET /api/boards/:boardId/cards: obtiene todas las tarjetas de las listas del board.
+  - Lists CRUD: GET/POST/PUT/DELETE con normalización de ids.
+  - Cards CRUD/PATCH para mover entre listas.
+  - Reordenamiento persistente: POST `/api/cards/reorder-batch` (batch de `position`).
+- “Mi Día” global: GET `/api/cards/search?start&end&userId` (filtro por rango y asignado opcional).
+- Timer Sessions: POST/PATCH para Focus/Break (FocusMode/Pomodoro).
+- Comments:
+  - GET /api/cards/:cardId/comments
+  - POST /api/cards/:cardId/comments
+  - PUT /api/cards/:cardId/comments/:commentId (editar)
+  - DELETE /api/cards/:cardId/comments/:commentId (eliminar; validación flexible de pertenencia)
+- Attachments (GCS):
+  - POST `/api/cards/:cardId/request-upload-url` (firma V4 write)
+  - POST `/api/cards/:cardId/attachments` (guarda en array con `Timestamp.now()` + `set(..., {merge:true})`)
+  - GET `/api/cards/:cardId/attachments/signed-read?filePath=...` (firma V4 read 10min)
+  - DELETE `/api/cards/:cardId/attachments/:attachmentId?deleteObject=true` (quita del array y borra objeto si se solicita)
+
+Cambios en Frontend (principales)
+- Modelos (src/types/data.ts)
+  - `Card.position?: number` para orden en lista.
+  - `Comment` y `TimerSession` definidos.
+
+- Hooks
+  - `src/hooks/useBoards.ts`: fix de bucle y selección de primer board.
+  - `src/hooks/useLists.ts`: creación/edición/eliminación + toasts.
+  - `src/hooks/useCards.ts`:
+    - Carga y agrupado por listId, ordenado por `position` (fallback `createdAt`).
+    - `handleCreateCard` y `handleMoveCard` (UI inmediata + persistencia/batch reorder).
+    - Listener global `card:updated` para reflejar guardados al instante.
+    - Toasts en crear/mover.
+
+- Kanban / UI
+  - `src/components/KanbanBoard.tsx`:
+    - DnD con react-beautiful-dnd.
+    - Nueva lista (con estado “Creando…”), crear tarjeta (estado “Añadiendo…”).
+    - Menú por lista (renombrar/eliminar) + ConfirmDialog.
+    - Enfoque de lista al entrar desde Home.
+  - `src/components/Card.tsx` y `CardContent.tsx`: render de tarjetas.
+  - `src/components/KanbanBoard.css`: estilos dark/glass.
+
+- Home / Navegación
+  - `src/components/HomeDashboard.tsx`: grid de listas, ver más/menos, mini reports, tile abre lista en Tablero, crear lista.
+  - `src/App.tsx`: rutas Home/Kanban/MiDía/Calendario/Zapier; selector de board y (opcional) de usuario.
+
+- Fechas / Vistas
+  - Normalización de `dueDate` en frontend (local midnight) y backend (Timestamp).
+  - `src/components/CalendarView.tsx`: muestra eventos de día completo (end exclusivo).
+  - `src/components/MyDay.tsx`: versión global por usuario (o sin filtro si no hay usuario); refresca tras guardados.
+
+- Focus/Pomodoro
+  - `src/context/PomodoroContext.tsx`: timer global (Focus/Break), sesiones en backend, notificaciones y beep.
+  - `src/components/FocusMode.tsx`: usa contexto; presets 25/5, 50/10, 90/15.
+  - `src/components/FocusWidget.tsx`: widget flotante (minimizable) para correr en segundo plano.
+
+- Comentarios
+  - `src/components/CardComments.tsx`: listar, agregar (menciones @Nombre), editar y eliminar con toasts.
+
+- Adjuntos
+  - `src/components/CardAttachments.tsx`: subir (signed upload), vista previa (signed read), abrir (signed read), eliminar (opcional con borrado en bucket).
+  - Construcción del `publicUrl` a partir del bucket de la signed URL (sin hardcode).
+
+- UX / Feedback
+  - `src/context/ToastContext.tsx`, `ToastContainer`, `Toast.css` → toasts globales.
+  - `src/components/Spinner.tsx` y CSS → spinners reutilizables.
+  - `src/components/ConfirmDialog.tsx` y CSS → confirmaciones visuales (listas/tableros).
+  - EditCardModal: spinner “Guardando…”, fix de orden de hooks.
+
+Estilos / Theming
+- `src/index.css`: tema oscuro, variables, controles base.
+- `src/App.css`, `KanbanBoard.css`, `Card.css` ajustados al look de muestra.png.
+
+Integración con GCS (resumen de pasos realizados)
+1) Crear bucket `esencial-flow-uploads-1234` (proyecto esencial-flow, acceso uniforme).
+2) CORS aplicado (localhost:5173 y 127.0.0.1:5173; métodos GET/PUT/POST/HEAD/DELETE/OPTIONS).
+3) IAM: rol `roles/storage.objectAdmin` para SA `firebase-adminsdk-fbsvc@esencialflow.iam.gserviceaccount.com`.
+4) Backend apunta al bucket en `admin.initializeApp({ storageBucket: "esencial-flow-uploads-1234" })`.
+5) Firma V4 write sin contentType, y V4 read para apertura.
+
+Notas / Known Issues
+- Warning de react-beautiful-dnd (defaultProps en memo): informativo, no afecta.
+- Si cambias de bucket/proyecto, repetir pasos de CORS/IAM y actualizar `storageBucket`.
+- Si “Abrir” un adjunto diera 403, forzar GET firmado (ya integrado) y verificar que el endpoint esté corriendo.
+
+Siguientes mejoras sugeridas
+1) Filtros rápidos en tablero (asignado, hoy, sin fecha).
+2) Edición inline de título de tarjeta y delete con confirmación + toast.
+3) Notificación a @mencionados (placeholder backend + toast UI).
+4) Autenticación con Google (Firebase Auth) y uso de `uid` en boards/cards.
+
+Archivos nuevos clave (lista parcial)
+- Backend: endpoints en `backend/src/index.ts` (ver secciones: comments, attachments, reorder-batch, search).
+- Frontend:
+  - Contextos: `src/context/PomodoroContext.tsx`, `src/context/ToastContext.tsx`.
+  - Componentes: `HomeDashboard.tsx/.css`, `FocusWidget.tsx/.css`, `ConfirmDialog.tsx/.css`, `ToastContainer.tsx/.css`, `Spinner.tsx/.css`, `CardComments.tsx`, `CardAttachments.tsx`.
+
+Cómo retomar rápidamente
+1) Levantar backend (3001) y frontend (5173) como arriba.
+2) Verificar bucket en `backend/src/index.ts` y que CORS/IAM sigan vigentes.
+3) Crear tablero en Home → Tablero → crear listas/tarjetas → editar dueDate → ver Mi Día/Calendario.
+4) Focus: abrir tarjeta → Focus, probar widget y notificaciones.
+5) Comentarios y adjuntos desde el modal de la tarjeta.

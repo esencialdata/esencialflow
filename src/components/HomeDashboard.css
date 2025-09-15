@@ -1,0 +1,58 @@
+ .home { display: flex; flex-direction: column; gap: 12px; }
+ .home-header { display: flex; justify-content: space-between; align-items: flex-end; padding: 4px 6px; }
+.home-header h1 { margin: 0; font-size: 22px; color: var(--color-text-light); }
+.subtitle { margin: 2px 0 0 0; color: var(--color-text-muted); font-size: 13px; }
+
+.home-reports {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 0 6px 4px;
+}
+
+.report-tile {
+  background: var(--color-background-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+.report-value { font-size: 20px; font-weight: 700; color: var(--color-text-light); }
+.report-label { font-size: 12px; color: var(--color-text-muted); }
+
+ .lists-grid {
+   display: grid;
+   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+   gap: 16px;
+ }
+
+ .list-tile {
+   background: var(--color-background-card);
+   border: 1px solid var(--color-border-light);
+   border-radius: 14px;
+   box-shadow: 0 6px 14px var(--color-shadow-light);
+   padding: 14px;
+   display: flex; flex-direction: column; gap: 10px;
+ }
+ .list-tile.create { border-style: dashed; display: grid; place-items: center; }
+ .create-inner { display: flex; flex-direction: column; gap: 8px; width: 100%; align-items: center; }
+ .plus { font-size: 28px; color: var(--color-text-muted); }
+ .create-inner input { width: 100%; }
+
+ .tile-header { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; }
+ .badge { width: 28px; height: 28px; border-radius: 6px; background: #2a3242; display: grid; place-items: center; color: var(--color-text-light); font-weight: 600; font-size: 12px; }
+ .tile-header h3 { margin: 0; font-size: 14px; color: var(--color-text-dark); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+ .icon-btn { background: transparent; border: none; color: var(--color-text-muted); cursor: pointer; }
+
+.tile-body { display: flex; flex-direction: column; gap: 8px; }
+.chip { display: grid; grid-template-columns: 22px 1fr 48px; align-items: center; gap: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--color-border); border-radius: 8px; height: 34px; padding: 0 8px; }
+.chip-index { color: var(--color-text-muted); font-size: 12px; }
+.chip-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
+.chip-time { color: var(--color-text-muted); font-size: 12px; text-align: right; }
+
+.link-btn { background: transparent; border: none; color: var(--color-accent-blue); padding: 6px 0; width: fit-content; }
+
+ .tile-footer { color: var(--color-text-muted); font-size: 12px; }
+
+ .home-empty { display: grid; place-items: center; height: 60vh; color: var(--color-text-muted); }

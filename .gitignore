@@ -1,0 +1,19 @@
+
+# Dependencies
+/node_modules
+/backend/node_modules
+
+# Build artifacts
+/dist
+/backend/dist
+
+# Secrets
+/backend/src/Esencial Flow Firebase Admin SDK.json
+/backend/src/serviceAccountKey.json
+
+# IDEs and editors
+.idea/
+.vscode/
+
+# OS-specific
+.DS_Store

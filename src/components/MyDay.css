@@ -1,0 +1,15 @@
+.my-day { padding: 20px; color: var(--color-text); }
+
+.todays-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.my-day-card {
+  background-color: var(--color-background-card); /* Use card background variable */
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 8px var(--color-shadow-light);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
