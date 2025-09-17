@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, User } from '../types/data';
+import { Card, User, Attachment } from '../types/data';
 import './EditCardModal.css';
 import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
@@ -22,7 +22,6 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   const { showToast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helpers for date-only handling in local timezone
   const toInputDateLocal = (value: Date | string): string => {
     const d = new Date(value);
     const year = d.getFullYear();
@@ -33,7 +32,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
 
   const fromInputDateLocal = (value: string): Date => {
     const [y, m, d] = value.split('-').map(Number);
-    return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0); // local midnight
+    return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
   };
 
   useEffect(() => {
@@ -41,6 +40,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
       setFormData({
         ...card,
         dueDate: card.dueDate ? toInputDateLocal(card.dueDate as any) : '',
+        attachments: Array.isArray(card.attachments) ? card.attachments : [],
       });
     }
   }, [card]);
@@ -54,13 +54,16 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleAttachmentsChange = (attachments: Attachment[]) => {
+    setFormData(prev => ({ ...prev, attachments }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setIsSaving(true);
     const updatedCardData = { ...card, ...formData } as Card;
 
-    // Convert dueDate string back to a Date at local midnight if provided
     if (updatedCardData.dueDate && typeof updatedCardData.dueDate === 'string') {
         updatedCardData.dueDate = fromInputDateLocal(updatedCardData.dueDate);
     }
@@ -148,7 +151,11 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
         <CardComments cardId={card.id} users={users} />
 
         {/* Attachments */}
-        <CardAttachments cardId={card.id} attachments={Array.isArray(card.attachments) ? (card.attachments as any) : []} />
+        <CardAttachments
+          cardId={card.id}
+          attachments={Array.isArray(formData.attachments) ? (formData.attachments as any) : []}
+          onAttachmentsChange={handleAttachmentsChange}
+        />
       </div>
       <ConfirmDialog
         open={confirmDelete}

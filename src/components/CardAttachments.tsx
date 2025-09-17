@@ -15,11 +15,11 @@ interface Attachment {
 
 interface CardAttachmentsProps {
   cardId: string;
-  attachments?: Attachment[];
+  attachments: Attachment[];
+  onAttachmentsChange: (attachments: Attachment[]) => void;
 }
 
-const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments = [] }) => {
-  const [items, setItems] = useState<Attachment[]>(attachments);
+const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, onAttachmentsChange }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
@@ -52,7 +52,6 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments =
       try {
         const putRes = await fetch(signedUrl, {
           method: 'PUT',
-          // No enviamos Content-Type fijo; la URL firmada ya no lo requiere
           body: file as any,
         });
         if (!putRes.ok) {
@@ -65,16 +64,14 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments =
         return;
       }
 
-      // Build public URL using the bucket from the signed URL to avoid hardcoding
+      // Build public URL
       let publicUrl = '';
       try {
         const u = new URL(signedUrl);
-        // signed URL path looks like /<bucket>/<object>
         const parts = u.pathname.split('/').filter(Boolean);
         const bucketName = parts[0];
         publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
       } catch {
-        // fallback (may not be publicly readable)
         publicUrl = filePath;
       }
 
@@ -88,7 +85,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments =
       try {
         const res = await axios.post(`${API_URL}/cards/${cardId}/attachments`, attPayload);
         const saved = res.data as Attachment;
-        setItems(prev => [...prev, saved]);
+        onAttachmentsChange([...attachments, saved]);
         showToast('Adjunto agregado', 'success');
       } catch (err: any) {
         console.error('Error attaching to card', err);
@@ -143,7 +140,8 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments =
     if (!confirm('¿Eliminar este adjunto?')) return;
     try {
       await axios.delete(`${API_URL}/cards/${cardId}/attachments/${encodeURIComponent(a.attachmentId)}`, { params: { deleteObject: true } });
-      setItems(prev => prev.filter(x => x.attachmentId !== a.attachmentId));
+      const remaining = attachments.filter(x => x.attachmentId !== a.attachmentId);
+      onAttachmentsChange(remaining);
       setError(null);
       showToast('Adjunto eliminado', 'success');
     } catch (e) {
@@ -156,9 +154,9 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments =
   return (
     <div style={{ marginTop: 16 }}>
       <h3 style={{ margin: '8px 0' }}>Adjuntos</h3>
-      {items.length === 0 && <p style={{ margin: 0 }}>No hay archivos adjuntos.</p>}
+      {attachments.length === 0 && <p style={{ margin: 0 }}>No hay archivos adjuntos.</p>}
       <ul style={{ listStyle: 'none', paddingLeft: 0, display: 'grid', gap: 8 }}>
-        {items.map((a) => (
+        {attachments.map((a) => (
           <li key={a.attachmentId} style={{ background: 'var(--color-background-card)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 8, display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <span title={a.fileName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>{a.fileName}</span>

@@ -410,6 +410,16 @@ app.patch('/api/cards/:cardId', async (req, res) => {
   try {
     const { cardId } = req.params;
     const incoming = { ...req.body } as any;
+
+    // Handle incrementing actualTime
+    if (incoming.incrementActualTime) {
+      const increment = Number(incoming.incrementActualTime);
+      delete incoming.incrementActualTime;
+      if (!isNaN(increment) && increment > 0) {
+        incoming.actualTime = admin.firestore.FieldValue.increment(increment);
+      }
+    }
+
     if (incoming.dueDate) {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;

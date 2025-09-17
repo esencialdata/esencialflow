@@ -16,6 +16,7 @@ interface PomodoroContextValue {
   mmss: string;
   // actions
   setActiveCard: (card: Card | null) => void;
+  setUserId: (userId: string) => void;
   start: () => Promise<void>;
   pause: () => void;
   stop: () => Promise<void>;
@@ -35,7 +36,12 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [focusLen, setFocusLen] = useState<number>(defaultFocus);
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string>('user-1');
   const workerRef = useRef<Worker | null>(null);
+
+  // Refs to hold current state for useCallback without dependencies
+  const stateRef = useRef({ phase, sessionId, focusLen, breakLen, activeCard, userId });
+  stateRef.current = { phase, sessionId, focusLen, breakLen, activeCard, userId };
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -70,7 +76,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {}
   };
 
-  const notify = async (title: string, body: string) => {
+  const notify = useCallback(async (title: string, body: string) => {
     await ensureNotifyPermission();
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -78,14 +84,19 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch {}
     playBeep();
-  };
+  }, []);
 
   const handlePhaseComplete = useCallback(async () => {
+    const { phase, sessionId, focusLen, breakLen, activeCard } = stateRef.current;
     setIsRunning(false);
+
     if (phase === 'focus') {
       if (sessionId) {
         try {
           await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
+          if (activeCard) {
+            await axios.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: focusLen });
+          }
         } catch (e) {
           console.error('Failed to complete timer session', e);
         } finally {
@@ -109,7 +120,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setPhase('focus');
       setRemainingSec(focusLen * 60);
     }
-  }, [phase, sessionId, focusLen, breakLen, notify]);
+  }, [notify]);
 
   useEffect(() => {
     const worker = new Worker('/pomodoro-worker.js');
@@ -131,7 +142,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       worker.terminate();
     };
-  }, []); // Simplified dependency array
+  }, [handlePhaseComplete]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -141,6 +152,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [phase, focusLen, breakLen, isRunning]);
 
   const start = async () => {
+    const { activeCard, isRunning, userId, phase } = stateRef.current;
     if (!activeCard || isRunning) return;
     setIsRunning(true);
     workerRef.current?.postMessage({ command: 'start', seconds: remainingSec });
@@ -149,7 +161,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const res = await axios.post(`${API_URL}/timer-sessions`, {
           cardId: activeCard.id,
-          userId: 'user-1',
+          userId: userId,
           type: phase,
         });
         const id = (res.data?.id) || res.data?.sessionId || null;
@@ -166,6 +178,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const stop = async () => {
+    const { phase, focusLen, breakLen, sessionId, activeCard } = stateRef.current;
     setIsRunning(false);
     workerRef.current?.postMessage({ command: 'stop' });
     const total = (phase === 'focus' ? focusLen : breakLen) * 60;
@@ -173,6 +186,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const elapsedMinutes = Math.round(((total - remainingSec) / 60) * 10) / 10;
         await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
+        if (activeCard && elapsedMinutes > 0 && phase === 'focus') {
+          await axios.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
+        }
       } catch (e) {
         console.error('Failed to end timer session', e);
       } finally {
@@ -199,6 +215,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     breakLen,
     mmss,
     setActiveCard,
+    setUserId,
     start,
     pause,
     stop,

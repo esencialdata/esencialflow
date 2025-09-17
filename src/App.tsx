@@ -9,9 +9,10 @@ import CreateBoardModal from './components/CreateBoardModal';
 import EditBoardModal from './components/EditBoardModal';
 import EditCardModal from './components/EditCardModal';
 import { useBoards } from './hooks/useBoards';
-import { useCards } from './hooks/useCards'; // Still needed for MyDay and CalendarView
+import { useCards } from './hooks/useCards';
 import ZapierIntegration from './components/ZapierIntegration';
 import CalendarView from './components/CalendarView';
+import ListView from './components/ListView';
 import { Card, User } from './types/data';
 import axios from 'axios';
 import logoUrl from '../logo_esencial_w.svg';
@@ -22,9 +23,9 @@ import { useToast } from './context/ToastContext';
 import ConfirmDialog from './components/ConfirmDialog';
 import LoadingOverlay from './components/LoadingOverlay';
 
-type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar';
-function App() {
+type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
+function App() {
   const [focusCard, setFocusCard] = useState<Card | null>(null);
   const [currentView, setCurrentView] = useState<View>('home');
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -47,7 +48,6 @@ function App() {
     handleDeleteBoard,
   } = useBoards();
 
-  // useCards is still needed for MyDay and CalendarView
   const { cards, isLoading: cardsLoading, error: cardsError, fetchCards: reloadCards } = useCards(currentBoardId);
   const pomodoro = usePomodoro();
   const { showToast } = useToast();
@@ -62,6 +62,12 @@ function App() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    if (selectedUserId) {
+      pomodoro.setUserId(selectedUserId);
+    }
+  }, [selectedUserId, pomodoro]);
 
   const fetchUsers = async () => {
     try {
@@ -130,28 +136,23 @@ function App() {
   };
 
   const reloadBoardsAfterImport = async (selectId: string) => {
-    // simple refetch via useBoards: toggle creating state to force refresh
-    // Better: extend useBoards with a fetch method; aquí optamos por set state helper
     try {
-      // naive approach: reload the page data by re-setting currentBoardId after slight delay
       setCurrentBoardId(selectId);
     } catch {}
   };
 
   const handleUpdateCard = async (updatedCard: Card) => {
     try {
-      // Auto-assign to the sole user if none set
       if (!updatedCard.assignedToUserId && users.length === 1) {
         updatedCard.assignedToUserId = users[0].userId;
       }
       await axios.put(`http://localhost:3001/api/cards/${updatedCard.id}`, updatedCard);
-      // Notificar a todos los hooks para que reflejen el cambio inmediatamente
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch {}
       setEditingCard(null);
       if (currentBoardId) {
         reloadCards(currentBoardId);
       }
-      setCardsVersion(v => v + 1); // notify views like MyDay to refresh
+      setCardsVersion(v => v + 1);
       showToast('Tarjeta actualizada', 'success');
     } catch (error) {
       console.error("Error updating card:", error);
@@ -162,7 +163,6 @@ function App() {
   const openListFromHome = (listId: string) => {
     setFocusListId(listId);
     setCurrentView('kanban');
-    // Clear the focus after navigating so it only highlights once
     setTimeout(() => setFocusListId(null), 1500);
   };
 
@@ -173,6 +173,7 @@ function App() {
         <nav>
           <button onClick={() => setCurrentView('home')} disabled={currentView === 'home'}>Home</button>
           <button onClick={() => setCurrentView('kanban')} disabled={currentView === 'kanban'}>Tablero</button>
+          <button onClick={() => setCurrentView('list')} disabled={currentView === 'list'}>Lista</button>
           <button onClick={() => setCurrentView('myday')} disabled={currentView === 'myday'}>Mi Día</button>
           <button onClick={() => setCurrentView('calendar')} disabled={currentView === 'calendar'}>Calendario</button>
           <button onClick={() => setCurrentView('zapier')} disabled={currentView === 'zapier'}>Zapier</button>
@@ -243,9 +244,13 @@ function App() {
             case 'calendar':
               if (cardsLoading) return <LoadingOverlay message="Cargando calendario…" />;
               if (cardsError) return <p className="error-message">{cardsError}</p>;
-              // Flatten cards grouped by listId into a single array for the calendar
               const cardsArray = Object.values(cards || {}).flat();
               return <CalendarView cards={cardsArray} />;
+            case 'list':
+              if (cardsLoading) return <LoadingOverlay message="Cargando lista…" />;
+              if (cardsError) return <p className="error-message">{cardsError}</p>;
+              const allCards = Object.values(cards || {}).flat();
+              return <ListView cards={allCards} onCardClick={handleEditCard} />;
             case 'zapier':
               return <ZapierIntegration />;
             default:

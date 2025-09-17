@@ -18,3 +18,4 @@
 # OS-specific
 .DS_Store
 .vercel
+cors.json
