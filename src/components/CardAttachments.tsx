@@ -2,16 +2,9 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import Spinner from './Spinner';
+import { Attachment } from '../types/data';
 
 const API_URL = 'http://localhost:3001/api';
-
-interface Attachment {
-  attachmentId: string;
-  fileName: string;
-  url: string;
-  fileType: string;
-  createdAt?: any;
-}
 
 interface CardAttachmentsProps {
   cardId: string;
@@ -81,6 +74,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
         fileName: file.name,
         url: publicUrl,
         fileType: file.type || 'application/octet-stream',
+        createdAt: new Date().toISOString(),
       };
       try {
         const res = await axios.post(`${API_URL}/cards/${cardId}/attachments`, attPayload);
