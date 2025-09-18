@@ -40,8 +40,8 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const workerRef = useRef<Worker | null>(null);
 
   // Refs to hold current state for useCallback without dependencies
-  const stateRef = useRef({ phase, sessionId, focusLen, breakLen, activeCard, userId });
-  stateRef.current = { phase, sessionId, focusLen, breakLen, activeCard, userId };
+  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId });
+  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId };
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');

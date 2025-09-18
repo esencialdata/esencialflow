@@ -28,6 +28,14 @@ export interface List {
   updatedAt: Date;
 }
 
+export interface Attachment {
+  attachmentId: string;
+  fileName: string;
+  url: string;
+  createdAt: Date | string;
+  fileType: string;
+}
+
 export interface Card {
   id: string;
   title: string;
@@ -45,13 +53,7 @@ export interface Card {
   createdAt: Date | string;
   updatedAt: Date | string;
   checklist?: { text: string; completed: boolean }[];
-  attachments?: {
-    attachmentId: string;
-    fileName: string;
-    url: string;
-    createdAt: Date | string;
-    fileType: string;
-  }[];
+  attachments?: Attachment[];
 }
 
 export interface TimerSession {
