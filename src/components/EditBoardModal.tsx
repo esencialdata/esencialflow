@@ -20,7 +20,11 @@ const EditBoardModal: React.FC<EditBoardModalProps> = ({ board, onClose, onSubmi
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'priority') {
+      setFormData(prev => ({ ...prev, [name]: value as 'low' | 'medium' | 'high' }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -46,6 +50,14 @@ const EditBoardModal: React.FC<EditBoardModalProps> = ({ board, onClose, onSubmi
             <select name="visibility" value={formData.visibility || 'private'} onChange={handleChange}>
               <option value="private">Private</option>
               <option value="public">Public</option>
+            </select>
+          </label>
+          <label>
+            Priority:
+            <select name="priority" value={formData.priority || 'medium'} onChange={handleChange}>
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
             </select>
           </label>
           <div className="modal-actions">

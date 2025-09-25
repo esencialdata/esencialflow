@@ -29,6 +29,42 @@
   font-weight: 500;
 }
 
+.list-view-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.priority-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.priority-chip.low {
+  color: #82d9a0;
+  background: rgba(130, 217, 160, 0.15);
+}
+
+.priority-chip.medium {
+  color: #ffd27f;
+  background: rgba(255, 210, 127, 0.18);
+}
+
+.priority-chip.high {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.2);
+}
+
+.list-view-date {
+  color: var(--color-text-muted);
+}
+
 .list-view-empty {
   padding: 40px;
   text-align: center;

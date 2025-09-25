@@ -36,6 +36,12 @@ const getChecklistProgress = (card: CardType) => {
   return { completed, total: card.checklist.length };
 };
 
+const PRIORITY_LABELS: Record<CardType['priority'], string> = {
+  low: 'Baja',
+  medium: 'Media',
+  high: 'Alta',
+};
+
 const CardContent: React.FC<CardContentProps> = ({ card, users, onClick, onStartFocus }) => {
   const assignedUser = users.find(u => u.userId === card.assignedToUserId);
   const checklistProgress = getChecklistProgress(card);
@@ -48,6 +54,7 @@ const CardContent: React.FC<CardContentProps> = ({ card, users, onClick, onStart
       <p>{card.title}</p>
       <div className="card-footer">
         <div className="card-meta">
+          <span className={`card-priority ${card.priority}`}>{PRIORITY_LABELS[card.priority] || 'Media'}</span>
           {checklistProgress && checklistProgress.total > 0 && (
             <div className="card-checklist-progress" title={`${checklistProgress.completed} de ${checklistProgress.total} completadas`}>
               <span className="icon">✅</span>

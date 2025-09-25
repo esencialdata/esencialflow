@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Webhook } from '../types/data';
+import { API_URL } from '../config/api';
 
 const ZapierIntegration: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -15,7 +16,7 @@ const ZapierIntegration: React.FC = () => {
 
   const fetchWebhooks = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/webhooks');
+      const response = await axios.get(`${API_URL}/webhooks`);
       setWebhooks(response.data);
     } catch (error) {
       console.error("Error fetching webhooks:", error);
@@ -45,7 +46,7 @@ const ZapierIntegration: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      await axios.post('http://localhost:3001/api/webhooks', { url: webhookUrl, triggerEvent });
+      await axios.post(`${API_URL}/webhooks`, { url: webhookUrl, triggerEvent });
       fetchWebhooks();
     } catch (error) {
       console.error("Error saving webhook:", error);

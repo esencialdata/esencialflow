@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Board } from '../types/data';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 // Helper to format board dates from Firestore Timestamps
 const formatBoardDates = (board: any): Board => {
     const createdAt = board.createdAt?._seconds ? new Date(board.createdAt._seconds * 1000) : new Date();
     const updatedAt = board.updatedAt?._seconds ? new Date(board.updatedAt._seconds * 1000) : new Date();
-    return { ...board, createdAt, updatedAt } as Board;
+    const priority = typeof board.priority === 'string' && ['low', 'medium', 'high'].includes(board.priority)
+      ? board.priority as Board['priority']
+      : 'medium';
+    return { ...board, createdAt, updatedAt, priority } as Board;
 };
 
 export const useBoards = () => {
@@ -44,7 +46,8 @@ export const useBoards = () => {
 
   const handleCreateBoard = async (boardData: Omit<Board, 'boardId' | 'createdAt' | 'updatedAt'>) => {
     try {
-      const response = await axios.post<any>(`${API_URL}/boards`, boardData);
+      const payload = { ...boardData, priority: boardData.priority || 'medium' };
+      const response = await axios.post<any>(`${API_URL}/boards`, payload);
       const newBoard = formatBoardDates(response.data);
       setBoards(prev => [...prev, newBoard]);
       setCurrentBoardId(newBoard.boardId);

@@ -332,13 +332,14 @@ interface AddCardFormProps {
 const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, defaultAssignedToUserId, currentUserId, filters, onChangeFilters }) => {
   const [newCardTitle, setNewCardTitle] = useState('');
   const [adding, setAdding] = useState(false);
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const { showToast } = useToast();
 
   const onAddCard = async () => {
     if (!newCardTitle.trim() || adding) return;
     setAdding(true);
     try {
-      const payload: any = { title: newCardTitle.trim() };
+      const payload: any = { title: newCardTitle.trim(), priority };
       if ((filters?.assignedToMe && currentUserId) || defaultAssignedToUserId) {
         payload.assignedToUserId = filters?.assignedToMe ? currentUserId : defaultAssignedToUserId;
       }
@@ -348,6 +349,7 @@ const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, def
 
       await handleCreateCard(listId, payload);
       setNewCardTitle('');
+      setPriority('medium');
 
       const title = (payload.title || '').toLowerCase();
       const hiddenBySearch = (filters?.q || '').trim() && !title.includes((filters?.q || '').trim().toLowerCase());
@@ -372,6 +374,11 @@ const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, def
           if (e.key === 'Enter') onAddCard();
         }}
       />
+      <select value={priority} onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}>
+        <option value="low">Baja</option>
+        <option value="medium">Media</option>
+        <option value="high">Alta</option>
+      </select>
       <button onClick={onAddCard} disabled={adding}>{adding ? 'Añadiendo…' : '+ Añadir Tarjeta'}</button>
     </div>
   );

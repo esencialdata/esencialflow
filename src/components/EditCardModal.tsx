@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import CardComments from './CardComments';
 import CardAttachments from './CardAttachments';
+import { API_URL } from '../config/api';
 
 interface EditCardModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
       setFormData({
         ...card,
         dueDate: card.dueDate ? toInputDateLocal(card.dueDate as any) : '',
+        priority: card.priority || 'medium',
         attachments: Array.isArray(card.attachments) ? card.attachments : [],
       });
     }
@@ -51,7 +53,11 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'priority') {
+      setFormData(prev => ({ ...prev, priority: value as Card['priority'] }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleAttachmentsChange = (attachments: Attachment[]) => {
@@ -79,7 +85,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   const deleteFromModal = async () => {
     if (!card) return;
     try {
-      await axios.delete(`http://localhost:3001/api/cards/${card.id}`);
+      await axios.delete(`${API_URL}/cards/${card.id}`);
       try { window.dispatchEvent(new CustomEvent('card:deleted', { detail: { id: card.id, listId: card.listId } })); } catch {}
       showToast('Tarjeta eliminada', 'success');
       onClose();
@@ -121,6 +127,18 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               value={formData.dueDate?.toString() || ''}
               onChange={handleChange}
             />
+          </label>
+          <label>
+            Priority:
+            <select
+              name="priority"
+              value={formData.priority || 'medium'}
+              onChange={handleChange}
+            >
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
+            </select>
           </label>
           <label>
             Estimated Time (minutes):

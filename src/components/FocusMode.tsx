@@ -30,6 +30,7 @@ const FocusMode: React.FC<FocusModeProps> = ({ card, onClose }) => {
       <div className="focus-mode-content" onClick={(e) => e.stopPropagation()}>
         <button className="close-btn" onClick={handleClose}>×</button>
         <h2>{card.title}</h2>
+        <p><strong>Prioridad:</strong> {card.priority === 'high' ? 'Alta' : card.priority === 'low' ? 'Baja' : 'Media'}</p>
         {card.dueDate && <p><strong>Due:</strong> {new Date(card.dueDate).toLocaleDateString()}</p>}
 
         <div className="pomodoro">

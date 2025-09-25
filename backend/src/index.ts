@@ -21,6 +21,16 @@ app.use(express.json());
 
 const port = 3001;
 
+const PRIORITY_VALUES = ['low', 'medium', 'high'] as const;
+type PriorityValue = typeof PRIORITY_VALUES[number];
+
+const sanitizePriority = (value: any, fallback: PriorityValue = 'medium'): PriorityValue => {
+  if (typeof value === 'string' && PRIORITY_VALUES.includes(value as PriorityValue)) {
+    return value as PriorityValue;
+  }
+  return fallback;
+};
+
 // Helpers
 const toTimestamp = (value: any): admin.firestore.Timestamp | undefined => {
   if (!value) return undefined;
@@ -50,6 +60,38 @@ const toTimestamp = (value: any): admin.firestore.Timestamp | undefined => {
   return admin.firestore.Timestamp.fromDate(d);
 };
 
+const buildDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const sanitizeDateParam = (value?: string | null): string | null => {
+  if (!value) {
+    return buildDateKey(new Date());
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) {
+    return null;
+  }
+  return buildDateKey(parsed);
+};
+
+const fromFirestoreTimestamp = (value: any): Date | null => {
+  if (!value) return null;
+  if (value instanceof admin.firestore.Timestamp) {
+    return value.toDate();
+  }
+  if (typeof value === 'object' && typeof value.seconds === 'number') {
+    return new Date(value.seconds * 1000);
+  }
+  return null;
+};
+
 // Users API
 app.get('/api/users', async (req, res) => {
   try {
@@ -60,6 +102,235 @@ app.get('/api/users', async (req, res) => {
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ message: "Error fetching users" });
+  }
+});
+
+// Habits API
+app.get('/api/habits', async (req, res) => {
+  try {
+    const { userId, includeArchived } = req.query as { userId?: string; includeArchived?: string };
+    let habitsQuery: admin.firestore.Query = db.collection('habits');
+    if (userId) {
+      habitsQuery = habitsQuery.where('userId', '==', userId);
+    }
+    const snapshot = await habitsQuery.get();
+    const include = includeArchived === 'true';
+    const habits = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter((habit: any) => include || !habit.archived);
+    res.json(habits);
+  } catch (error) {
+    console.error('Error fetching habits:', error);
+    res.status(500).json({ message: 'Error fetching habits' });
+  }
+});
+
+app.post('/api/habits', async (req, res) => {
+  try {
+    const { name, description, userId } = req.body || {};
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ message: 'name and userId are required' });
+    }
+
+    const habitPayload = {
+      name: trimmedName,
+      description: typeof description === 'string' ? description.trim() : '',
+      userId,
+      archived: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await db.collection('habits').add(habitPayload);
+    const saved = await docRef.get();
+    res.status(201).json({ id: docRef.id, ...saved.data() });
+  } catch (error) {
+    console.error('Error creating habit:', error);
+    res.status(500).json({ message: 'Error creating habit' });
+  }
+});
+
+app.put('/api/habits/:habitId', async (req, res) => {
+  try {
+    const { habitId } = req.params;
+    const { name, description, archived } = req.body || {};
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      return res.status(400).json({ message: 'name is required' });
+    }
+
+    const habitRef = db.collection('habits').doc(habitId);
+    const snap = await habitRef.get();
+    if (!snap.exists) {
+      return res.status(204).send();
+    }
+
+    const updatePayload: Record<string, any> = {
+      name: trimmedName,
+      description: typeof description === 'string' ? description.trim() : '',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (typeof archived === 'boolean') {
+      updatePayload.archived = archived;
+    }
+
+    await habitRef.update(updatePayload);
+    const updated = await habitRef.get();
+    res.json({ id: habitId, ...updated.data() });
+  } catch (error) {
+    console.error('Error updating habit:', error);
+    res.status(500).json({ message: 'Error updating habit' });
+  }
+});
+
+app.delete('/api/habits/:habitId', async (req, res) => {
+  try {
+    const { habitId } = req.params;
+    const habitRef = db.collection('habits').doc(habitId);
+    const snap = await habitRef.get();
+    if (!snap.exists) {
+      return res.status(404).json({ message: 'Habit not found' });
+    }
+
+    const completionsSnap = await db
+      .collection('habitCompletions')
+      .where('habitId', '==', habitId)
+      .get();
+
+    const batch = db.batch();
+    completionsSnap.docs.forEach(doc => batch.delete(doc.ref));
+    batch.delete(habitRef);
+    await batch.commit();
+
+    res.json({ id: habitId, deletedCompletions: completionsSnap.size });
+  } catch (error) {
+    console.error('Error deleting habit:', error);
+    res.status(500).json({ message: 'Error deleting habit' });
+  }
+});
+
+app.get('/api/habits/daily', async (req, res) => {
+  try {
+    const { userId, date } = req.query as { userId?: string; date?: string };
+    const dateKey = sanitizeDateParam(date || null);
+    if (!dateKey) {
+      return res.status(400).json({ message: 'Invalid date parameter' });
+    }
+
+    let habitsQuery: admin.firestore.Query = db.collection('habits');
+    if (userId) {
+      habitsQuery = habitsQuery.where('userId', '==', userId);
+    }
+    const habitsSnapshot = await habitsQuery.get();
+    const activeHabits = habitsSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter((habit: any) => !habit.archived);
+
+    if (!activeHabits.length) {
+      return res.json([]);
+    }
+
+    let completionQuery = db.collection('habitCompletions').where('date', '==', dateKey);
+    if (userId) {
+      completionQuery = completionQuery.where('userId', '==', userId);
+    }
+    const completionsSnapshot = await completionQuery.get();
+    const completions = new Map<string, any>();
+    completionsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data && data.habitId) {
+        completions.set(data.habitId, { id: doc.id, ...data });
+      }
+    });
+
+    const payload = activeHabits.map((habit: any) => {
+      const completion = completions.get(habit.id);
+      const completedAt = completion ? fromFirestoreTimestamp(completion.completedAt) : null;
+      return {
+        ...habit,
+        date: dateKey,
+        completed: Boolean(completion),
+        completedAt: completedAt ? completedAt.toISOString() : null,
+      };
+    });
+
+    res.json(payload);
+  } catch (error) {
+    console.error('Error fetching daily habits:', error);
+    res.status(500).json({ message: 'Error fetching daily habits' });
+  }
+});
+
+app.post('/api/habits/:habitId/check', async (req, res) => {
+  try {
+    const { habitId } = req.params;
+    const { date, userId } = req.body || {};
+    const dateKey = sanitizeDateParam(date || null);
+    if (!dateKey) {
+      return res.status(400).json({ message: 'Invalid date parameter' });
+    }
+
+    const habitRef = db.collection('habits').doc(habitId);
+    const habitSnap = await habitRef.get();
+    if (!habitSnap.exists) {
+      return res.status(404).json({ message: 'Habit not found' });
+    }
+    const habitData = habitSnap.data() as any;
+    if (userId && habitData.userId && userId !== habitData.userId) {
+      return res.status(403).json({ message: 'Habit does not belong to user' });
+    }
+
+    const completionId = `${habitId}_${dateKey}`;
+    const completionRef = db.collection('habitCompletions').doc(completionId);
+    const completionPayload = {
+      habitId,
+      userId: habitData.userId,
+      date: dateKey,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await completionRef.set(completionPayload, { merge: true });
+    const saved = await completionRef.get();
+    res.status(201).json({ id: completionRef.id, ...saved.data() });
+  } catch (error) {
+    console.error('Error checking habit:', error);
+    res.status(500).json({ message: 'Error checking habit' });
+  }
+});
+
+app.delete('/api/habits/:habitId/check', async (req, res) => {
+  try {
+    const { habitId } = req.params;
+    const { date, userId } = req.query as { date?: string; userId?: string };
+    const dateKey = sanitizeDateParam(date || null);
+    if (!dateKey) {
+      return res.status(400).json({ message: 'Invalid date parameter' });
+    }
+
+    const habitRef = db.collection('habits').doc(habitId);
+    const habitSnap = await habitRef.get();
+    if (!habitSnap.exists) {
+      return res.status(404).json({ message: 'Habit not found' });
+    }
+    const habitData = habitSnap.data() as any;
+    if (userId && habitData.userId && userId !== habitData.userId) {
+      return res.status(403).json({ message: 'Habit does not belong to user' });
+    }
+
+    const completionId = `${habitId}_${dateKey}`;
+    const completionRef = db.collection('habitCompletions').doc(completionId);
+    const completionSnap = await completionRef.get();
+    if (!completionSnap.exists) {
+      return res.status(204).send();
+    }
+
+    await completionRef.delete();
+    res.json({ id: completionId, habitId, date: dateKey });
+  } catch (error) {
+    console.error('Error unchecking habit:', error);
+    res.status(500).json({ message: 'Error unchecking habit' });
   }
 });
 
@@ -96,6 +367,7 @@ app.post('/api/boards', async (req, res) => {
   try {
     const newBoardData = {
       ...req.body,
+      priority: sanitizePriority((req.body as any)?.priority, 'medium'),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -113,6 +385,9 @@ app.put('/api/boards/:boardId', async (req, res) => {
     const { boardId } = req.params;
     const updatedBoardData = {
       ...req.body,
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'priority')
+        ? { priority: sanitizePriority(req.body.priority) }
+        : {}),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     await db.collection('boards').doc(boardId).update(updatedBoardData);
@@ -348,6 +623,8 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;
     }
+    const priority = sanitizePriority(incoming.priority, 'medium');
+    delete incoming.priority;
 
     // Determine position at end of list if not provided
     let position = incoming.position;
@@ -360,6 +637,7 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
       ...incoming,
       position,
       listId,
+      priority,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -393,6 +671,9 @@ app.put('/api/cards/:cardId', async (req, res) => {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;
     }
+    if (Object.prototype.hasOwnProperty.call(incoming, 'priority')) {
+      incoming.priority = sanitizePriority(incoming.priority);
+    }
 
     const updatedCardData = {
       ...incoming,
@@ -423,6 +704,9 @@ app.patch('/api/cards/:cardId', async (req, res) => {
     if (incoming.dueDate) {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;
+    }
+    if (Object.prototype.hasOwnProperty.call(incoming, 'priority')) {
+      incoming.priority = sanitizePriority(incoming.priority);
     }
 
     const updatedFields = {

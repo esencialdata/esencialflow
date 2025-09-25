@@ -39,6 +39,31 @@
   gap: 8px;
 }
 
+.board-priority {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.board-priority.low {
+  color: #82d9a0;
+  background: rgba(130, 217, 160, 0.15);
+}
+
+.board-priority.medium {
+  color: #ffd27f;
+  background: rgba(255, 210, 127, 0.18);
+}
+
+.board-priority.high {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.2);
+}
+
 .App-main {
   flex-grow: 1;
   padding: 16px 12px 24px;

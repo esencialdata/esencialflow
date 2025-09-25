@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Card } from '../types/data';
 import { useToast } from '../context/ToastContext';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 // Robust date parser for fields that may come as Firestore Timestamp, ISO string, number, or Date
 const parseDate = (value: any): Date | undefined => {
@@ -28,7 +27,10 @@ const formatCardDates = (card: any): Card => {
   const createdAt = parseDate(card.createdAt) || new Date();
   const updatedAt = parseDate(card.updatedAt) || new Date();
   const dueDate = parseDate(card.dueDate);
-  return { ...card, createdAt, updatedAt, dueDate } as Card;
+  const priority = typeof card.priority === 'string' && ['low', 'medium', 'high'].includes(card.priority)
+    ? card.priority as Card['priority']
+    : 'medium';
+  return { ...card, createdAt, updatedAt, dueDate, priority } as Card;
 };
 
 export const useCards = (boardId: string | null) => {

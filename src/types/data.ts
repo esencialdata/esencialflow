@@ -9,12 +9,29 @@ export interface User {
   avatarUrl?: string; // URL de la imagen de perfil (opcional)
 }
 
+export interface Habit {
+  id: string;
+  name: string;
+  description?: string;
+  userId: string;
+  archived?: boolean;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+}
+
+export interface HabitDailyStatus extends Habit {
+  date: string;
+  completed: boolean;
+  completedAt?: Date | string | null;
+}
+
 export interface Board {
   boardId: string; // Identificador único del tablero
   name: string; // Nombre del tablero
   description?: string; // Descripción del tablero (opcional)
   ownerId: string; // ID del usuario creador/propietario
   visibility: "public" | "private"; // Visibilidad del tablero
+  priority: 'low' | 'medium' | 'high';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +58,7 @@ export interface Card {
   title: string;
   description?: string;
   listId: string;
+  priority: 'low' | 'medium' | 'high';
   position?: number; // Orden dentro de la lista
   dueDate?: Date | string;
   completed?: boolean;

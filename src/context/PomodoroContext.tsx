@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import { Card } from '../types/data';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 type Phase = 'focus' | 'break';
 

@@ -1,4 +1,7 @@
-.my-day { padding: 20px; color: var(--color-text); }
+.my-day {
+  padding: 20px;
+  color: var(--color-text, #1f1f1f);
+}
 
 .todays-cards {
   display: flex;
@@ -12,4 +15,163 @@
   padding: 12px;
   box-shadow: 0 2px 8px var(--color-shadow-light);
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.habits-section {
+  margin-top: 32px;
+  margin-bottom: 0;
+  padding: 16px;
+  background-color: var(--color-background-card, #1a1f2b);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px var(--color-shadow-light);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  color: var(--color-text, #e8eef5);
+}
+
+.habits-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.habit-status {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, rgba(0, 0, 0, 0.6));
+}
+
+.habit-help {
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: var(--color-text-muted, rgba(0, 0, 0, 0.6));
+}
+
+.habit-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.habit-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background-color: var(--color-background, #ffffff);
+  color: #1f1f1f;
+}
+
+.habit-form input::placeholder {
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.habit-form button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--color-primary, #3f51b5);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.habit-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.habit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.habit-item {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.habit-item:last-child {
+  border-bottom: none;
+}
+
+.habit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.habit-item label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.habit-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.habit-edit-input {
+  min-width: 160px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #f5f7fb;
+  color: #1f1f1f;
+}
+
+.habit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.habit-action {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.habit-action:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.habit-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.habit-action.danger {
+  border-color: rgba(255, 128, 128, 0.3);
+  color: #ffb0b0;
+  background: rgba(255, 64, 64, 0.12);
+}
+
+.habit-action.danger:hover {
+  background: rgba(255, 64, 64, 0.22);
+}
+
+.habit-item.completed span {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.habit-item.pending {
+  opacity: 0.6;
+}
+
+.habit-empty {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, rgba(0, 0, 0, 0.6));
 }

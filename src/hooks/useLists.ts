@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { List } from '../types/data';
 import { useToast } from '../context/ToastContext';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 // Helper to format list dates (assuming lists also have createdAt/updatedAt)
 const formatListDates = (list: any): List => {

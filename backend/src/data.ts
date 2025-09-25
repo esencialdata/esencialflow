@@ -6,6 +6,7 @@ export interface Board {
   description?: string;
   ownerId: string;
   visibility: "public" | "private";
+  priority: 'low' | 'medium' | 'high';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +25,7 @@ export interface Card {
   title: string;
   description: string;
   listId: string;
+  priority: 'low' | 'medium' | 'high';
   dueDate?: Date;
   assignedToUserId?: string;
   estimatedTime?: number;
@@ -63,6 +65,7 @@ export const boards: Board[] = [
     description: "Un tablero para desarrollo y pruebas",
     ownerId: "user-1",
     visibility: "public",
+    priority: 'medium',
     createdAt: new Date(),
     updatedAt: new Date(),
   }
@@ -93,6 +96,7 @@ export const cards: Card[] = [
     title: "Conectar Frontend con Backend",
     description: "Implementar la llamada a la API para obtener los datos del tablero.",
     listId: initialListId1,
+    priority: 'high',
     dueDate: new Date(new Date().setDate(new Date().getDate() + 1)),
     assignedToUserId: "user-1",
     estimatedTime: 60,
@@ -109,6 +113,7 @@ export const cards: Card[] = [
     title: "Crear datos de prueba",
     description: "Añadir datos iniciales al backend para facilitar el desarrollo.",
     listId: initialListId1,
+    priority: 'medium',
     dueDate: new Date(),
     assignedToUserId: "user-1",
     estimatedTime: 30,
@@ -121,6 +126,7 @@ export const cards: Card[] = [
     title: "Revisar la funcionalidad de Drag and Drop",
     description: "Asegurarse de que las tarjetas se puedan mover entre listas.",
     listId: initialListId2,
+    priority: 'low',
     dueDate: new Date(new Date().setDate(new Date().getDate() - 1)),
     assignedToUserId: "user-2",
     estimatedTime: 90,

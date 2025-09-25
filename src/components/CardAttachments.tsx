@@ -3,8 +3,7 @@ import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import Spinner from './Spinner';
 import { Attachment } from '../types/data';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 interface CardAttachmentsProps {
   cardId: string;

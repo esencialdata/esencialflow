@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import { Comment, User } from '../types/data';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config/api';
 
 interface CardCommentsProps {
   cardId: string;

@@ -94,6 +94,13 @@
 
 .add-card-form { display: flex; gap: 8px; }
 .add-card-form input { flex: 1; }
+.add-card-form select {
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  padding: 6px 8px;
+}
 
 /* Custom Scrollbar Styles */
 .cards-container::-webkit-scrollbar {

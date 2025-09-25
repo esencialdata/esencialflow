@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from './ConfirmDialog';
 import { usePomodoro } from '../context/PomodoroContext';
+import { API_URL } from '../config/api';
 
 interface CardProps {
   card: CardType;
@@ -37,7 +38,11 @@ const generateColorFromId = (id: string) => {
   return `hsl(${h}, ${s}%, ${l}%)`;
 };
 
-const API_URL = 'http://localhost:3001/api';
+const PRIORITY_LABELS: Record<CardType['priority'], string> = {
+  low: 'Baja',
+  medium: 'Media',
+  high: 'Alta',
+};
 
 const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocus, onToggleComplete, onArchiveToggle }) => {
   const assignedUser = users.find(u => u.userId === card.assignedToUserId);
@@ -122,6 +127,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
           )}
           <div className="card-footer">
             <div className="card-meta">
+              <span className={`card-priority ${card.priority}`}>{PRIORITY_LABELS[card.priority] || 'Media'}</span>
               {card.dueDate && (
                 <div className={`card-due-date${isOverdue ? ' overdue' : ''}`} title={isOverdue ? 'Vencida' : 'Fecha'}>
                   <span className="icon">{isOverdue ? '⚠️' : '📅'}</span>

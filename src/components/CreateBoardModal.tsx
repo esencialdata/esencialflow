@@ -11,6 +11,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, on
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('private');
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
 
   if (!isOpen) return null;
 
@@ -18,10 +19,11 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, on
     e.preventDefault();
     // A real app would get ownerId from auth context
     const ownerId = 'user-1'; // Placeholder
-    onSubmit({ name, description, visibility, ownerId });
+    onSubmit({ name, description, visibility, ownerId, priority });
     setName('');
     setDescription('');
     setVisibility('private');
+    setPriority('medium');
   };
 
   return (
@@ -42,6 +44,14 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, on
             <select value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
               <option value="private">Private</option>
               <option value="public">Public</option>
+            </select>
+          </label>
+          <label>
+            Priority:
+            <select value={priority} onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}>
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
             </select>
           </label>
           <div className="modal-actions">

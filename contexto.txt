@@ -107,7 +107,7 @@ Resumen Ejecutivo
 Cómo correr (local)
 - Backend: `npm run build --prefix backend` y luego `npm run serve --prefix backend` → http://localhost:3001
 - Frontend: `npm run dev` → http://localhost:5173
-- Variables fijas en código: API base en `http://localhost:3001/api` (frontend)
+- Variables frontend: definir `VITE_API_URL` con la URL del backend (por ejemplo `https://tu-backend/api`); localmente cae en `http://localhost:3001/api`.
 
 Storage (GCS) para adjuntos
 - Bucket usado: `esencial-flow-uploads-1234` (proyecto: esencial-flow)

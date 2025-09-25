@@ -4,6 +4,8 @@ import { Card as CardType, User } from '../types/data';
 import CardContent from './CardContent';
 import './MyDay.css';
 import LoadingOverlay from './LoadingOverlay';
+import { useHabits } from '../hooks/useHabits';
+import { API_URL } from '../config/api';
 
 interface MyDayProps {
   userId?: string; // optional: if missing, show all users' cards due today
@@ -17,6 +19,22 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
   const [todaysCards, setTodaysCards] = useState<CardType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [newHabitName, setNewHabitName] = useState('');
+  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
+  const [editingHabitValue, setEditingHabitValue] = useState('');
+
+  const {
+    habits,
+    isLoading: habitsLoading,
+    error: habitsError,
+    isCreating: habitCreating,
+    pendingHabitId,
+    updatingHabitId,
+    createHabit,
+    toggleHabit,
+    updateHabit,
+    deleteHabit,
+  } = useHabits(userId);
 
   // Robust parser for dueDate
   const parseDate = (value: any): Date | undefined => {
@@ -45,7 +63,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
         const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
         const params = new URLSearchParams({ start: today.toISOString(), end: tomorrow.toISOString() });
         if (userId) params.set('userId', userId);
-        const response = await axios.get<any[]>(`http://localhost:3001/api/cards/search?${params.toString()}`);
+        const response = await axios.get<any[]>(`${API_URL}/cards/search?${params.toString()}`);
         const filtered = response.data
           .map((c: any) => ({ ...c, dueDate: parseDate(c.dueDate) }))
           .filter((c: any) => !c.completed) as CardType[];
@@ -72,6 +90,37 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
     onStartFocus(card);
   };
 
+  const canManageHabits = Boolean(userId);
+
+  const handleSubmitHabit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHabitName.trim()) return;
+    const created = await createHabit(newHabitName);
+    if (created) {
+      setNewHabitName('');
+    }
+  };
+
+  const beginEditHabit = (habitId: string, currentName: string) => {
+    setEditingHabitId(habitId);
+    setEditingHabitValue(currentName);
+  };
+
+  const handleSaveHabit = async (habitId: string) => {
+    if (!editingHabitValue.trim()) return;
+    const ok = await updateHabit(habitId, editingHabitValue);
+    if (ok) {
+      setEditingHabitId(null);
+      setEditingHabitValue('');
+    }
+  };
+
+  const handleDeleteHabit = async (habitId: string) => {
+    const confirmed = window.confirm('¿Eliminar este hábito? Se borrarán sus registros diarios.');
+    if (!confirmed) return;
+    await deleteHabit(habitId);
+  };
+
   return (
     <div className="my-day">
       <h2>Mi Día</h2>
@@ -91,6 +140,101 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
           />
         ))}
       </div>
+      <section className="habits-section">
+        <div className="habits-header">
+          <h3>Checklist de hábitos</h3>
+          {habitsLoading && <span className="habit-status">Cargando…</span>}
+        </div>
+        {!canManageHabits && (
+          <p className="habit-help">Selecciona un usuario para agregar o marcar hábitos.</p>
+        )}
+        {habitsError && <p className="error-message">{habitsError}</p>}
+        <form className="habit-form" onSubmit={handleSubmitHabit}>
+          <input
+            type="text"
+            placeholder="Agregar nuevo hábito"
+            value={newHabitName}
+            onChange={(e) => setNewHabitName(e.target.value)}
+            disabled={habitCreating}
+          />
+          <button type="submit" disabled={habitCreating || !newHabitName.trim()}>
+            {habitCreating ? 'Guardando…' : 'Agregar'}
+          </button>
+        </form>
+        <ul className="habit-list">
+          {habits.length === 0 && !habitsLoading && (
+            <li className="habit-empty">No tienes hábitos registrados para hoy.</li>
+          )}
+          {habits.map(habit => (
+            <li
+              key={habit.id}
+              className={`habit-item ${habit.completed ? 'completed' : ''} ${pendingHabitId === habit.id ? 'pending' : ''}`.trim()}
+            >
+              <div className="habit-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={habit.completed}
+                    onChange={() => toggleHabit(habit.id)}
+                    disabled={pendingHabitId === habit.id || updatingHabitId === habit.id || habitsLoading}
+                  />
+                  {editingHabitId === habit.id ? (
+                    <input
+                      className="habit-edit-input"
+                      value={editingHabitValue}
+                      onChange={(e) => setEditingHabitValue(e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    <span>{habit.name}</span>
+                  )}
+                </label>
+                <div className="habit-actions">
+                  {editingHabitId === habit.id ? (
+                    <>
+                      <button
+                        type="button"
+                        className="habit-action"
+                        onClick={() => handleSaveHabit(habit.id)}
+                        disabled={updatingHabitId === habit.id || !editingHabitValue.trim()}
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        className="habit-action"
+                        onClick={() => { setEditingHabitId(null); setEditingHabitValue(''); }}
+                        disabled={updatingHabitId === habit.id}
+                      >
+                        Cancelar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="habit-action"
+                        onClick={() => beginEditHabit(habit.id, habit.name)}
+                        disabled={updatingHabitId === habit.id}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="habit-action danger"
+                        onClick={() => handleDeleteHabit(habit.id)}
+                        disabled={updatingHabitId === habit.id}
+                      >
+                        Borrar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 };

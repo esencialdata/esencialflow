@@ -22,6 +22,7 @@ import ToastContainer from './components/ToastContainer';
 import { useToast } from './context/ToastContext';
 import ConfirmDialog from './components/ConfirmDialog';
 import LoadingOverlay from './components/LoadingOverlay';
+import { API_URL } from './config/api';
 
 type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
@@ -59,6 +60,29 @@ function App() {
     } catch { return { assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false, q: '' }; }
   });
 
+  const fallbackUsers: User[] = [
+    {
+      userId: 'local-default',
+      name: 'Aaron Espinosa',
+      email: 'sin-correo@ejemplo.com',
+    },
+  ];
+
+  const applyUsers = (list: User[]) => {
+    if (!list.length) {
+      setUsers(fallbackUsers);
+      setSelectedUserId(prev => prev || fallbackUsers[0].userId);
+      return;
+    }
+    setUsers(list);
+    setSelectedUserId(prev => {
+      if (prev && list.some(u => u.userId === prev)) {
+        return prev;
+      }
+      return list[0].userId;
+    });
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -71,13 +95,11 @@ function App() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get<User[]>('http://localhost:3001/api/users');
-      setUsers(res.data);
-      if (res.data.length && !selectedUserId) {
-        setSelectedUserId(res.data[0].userId);
-      }
+      const res = await axios.get<User[]>(`${API_URL}/users`);
+      applyUsers(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Error fetching users:", error);
+      applyUsers([]);
     }
   };
 
@@ -89,6 +111,8 @@ function App() {
   const handleCloseFocus = () => {
     setFocusCard(null);
   };
+
+  const currentBoard = boards.find(b => b.boardId === currentBoardId) || null;
 
   const handleEditCard = (card: Card) => {
     setEditingCard(card);
@@ -104,7 +128,7 @@ function App() {
   const exportBoard = async () => {
     if (!currentBoardId) return;
     try {
-      const res = await axios.get(`http://localhost:3001/api/boards/${currentBoardId}/export`);
+      const res = await axios.get(`${API_URL}/boards/${currentBoardId}/export`);
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -123,7 +147,7 @@ function App() {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      const res = await axios.post(`http://localhost:3001/api/boards/import`, json);
+      const res = await axios.post(`${API_URL}/boards/import`, json);
       const newBoardId = res.data?.newBoardId;
       if (newBoardId) {
         await reloadBoardsAfterImport(newBoardId);
@@ -146,7 +170,7 @@ function App() {
       if (!updatedCard.assignedToUserId && users.length === 1) {
         updatedCard.assignedToUserId = users[0].userId;
       }
-      await axios.put(`http://localhost:3001/api/cards/${updatedCard.id}`, updatedCard);
+      await axios.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch {}
       setEditingCard(null);
       if (currentBoardId) {
@@ -185,6 +209,9 @@ function App() {
                 <option key={board.boardId} value={board.boardId}>{board.name}</option>
               ))}
             </select>
+          )}
+          {currentBoard && (
+            <span className={`board-priority ${currentBoard.priority}`}>Prioridad: {currentBoard.priority === 'high' ? 'Alta' : currentBoard.priority === 'low' ? 'Baja' : 'Media'}</span>
           )}
           {currentBoardId && (
             <>
