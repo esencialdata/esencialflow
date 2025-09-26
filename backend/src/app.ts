@@ -3,14 +3,49 @@ import cors from 'cors';
 import axios from 'axios';
 import * as admin from 'firebase-admin';
 
-// TODO: Asegúrate de que tu archivo serviceAccountKey.json esté en backend/src/
-import serviceAccount from './serviceAccountKey.json';
+// --- Firebase Admin Initialization ---
+const initializeFirebaseAdmin = () => {
+  // Don't initialize if already running (e.g. in a hot-reload environment)
+  if (admin.apps.length > 0) {
+    return;
+  }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  // Bucket de Cloud Storage donde se almacenarán los adjuntos
-  storageBucket: "esencial-flow-uploads-1234"
-});
+  const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!serviceAccountString) {
+    // In a production environment, this is a fatal error.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('FATAL: FIREBASE_SERVICE_ACCOUNT env var not set. Firebase Admin SDK could not be initialized.');
+      return;
+    } 
+    // In a dev environment, try to fall back to a local file.
+    try {
+      const serviceAccount = require('./serviceAccountKey.json');
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      console.log('Firebase Admin SDK initialized using local serviceAccountKey.json');
+      return;
+    } catch (e) {
+      console.error('Could not initialize Firebase Admin SDK. Missing serviceAccountKey.json and FIREBASE_SERVICE_ACCOUNT env var.', e);
+      return;
+    }
+  }
+
+  try {
+    // Parse the base64-encoded service account string
+    const serviceAccount = JSON.parse(
+      Buffer.from(serviceAccountString, 'base64').toString('ascii')
+    );
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    console.log('Firebase Admin SDK initialized successfully from environment variable.');
+  } catch (e) {
+    console.error('Error initializing Firebase Admin SDK from environment variable:', e);
+  }
+};
+
+initializeFirebaseAdmin();
 
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
