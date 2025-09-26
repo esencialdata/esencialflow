@@ -5,7 +5,7 @@
 
 # Build artifacts
 /dist
-/backend/dist
+# Backend build (checked-in for serverless handlers)
 
 # Secrets
 /backend/src/Esencial Flow Firebase Admin SDK.json
