@@ -1,7 +1,5 @@
 {
-  "workspaces": {
-    "packages": [
-      "backend/**"
-    ]
-  }
+  "installCommand": "npm install && npm --prefix backend install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }
