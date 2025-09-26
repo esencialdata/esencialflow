@@ -108,6 +108,8 @@ Cómo correr (local)
 - Backend: `npm run build --prefix backend` y luego `npm run serve --prefix backend` → http://localhost:3001
 - Frontend: `npm run dev` → http://localhost:5173
 - Variables frontend: definir `VITE_API_URL` con la URL del backend (por ejemplo `https://tu-backend/api`); localmente cae en `http://localhost:3001/api`.
+- Autenticación (Firebase Web): agrega en Vercel y `.env.local` los valores `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
+- Backend: `FIREBASE_SERVICE_ACCOUNT` sigue siendo obligatorio (JSON o Base64). Usa `AUTH_DISABLED=true` solo si quieres saltarte la verificación en entornos de desarrollo.
 
 Storage (GCS) para adjuntos
 - Bucket usado: `esencial-flow-uploads-1234` (proyecto: esencial-flow)

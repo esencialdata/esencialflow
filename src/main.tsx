@@ -4,11 +4,14 @@ import App from './App.tsx'
 import './index.css'
 import { PomodoroProvider } from './context/PomodoroContext'
 import { ToastProvider } from './context/ToastContext'
+import { AuthProvider } from './context/AuthContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <ToastProvider>
-    <PomodoroProvider>
-      <App />
-    </PomodoroProvider>
+    <AuthProvider>
+      <PomodoroProvider>
+        <App />
+      </PomodoroProvider>
+    </AuthProvider>
   </ToastProvider>
 )

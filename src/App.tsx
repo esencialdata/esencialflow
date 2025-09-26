@@ -23,6 +23,8 @@ import { useToast } from './context/ToastContext';
 import ConfirmDialog from './components/ConfirmDialog';
 import LoadingOverlay from './components/LoadingOverlay';
 import { API_URL } from './config/api';
+import { useAuth } from './context/AuthContext';
+import LoginScreen from './components/LoginScreen';
 
 type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
@@ -34,6 +36,7 @@ function App() {
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [cardsVersion, setCardsVersion] = useState(0);
   const [focusListId, setFocusListId] = useState<string | null>(null);
+  const { user, initializing, signOutFromApp, getIdToken } = useAuth();
   const {
     boards,
     currentBoardId,
@@ -88,6 +91,25 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const interceptor = axios.interceptors.request.use(async (config) => {
+      if (user) {
+        const token = await getIdToken();
+        if (token) {
+          config.headers = config.headers ?? {};
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } else if (config.headers?.Authorization) {
+        delete config.headers.Authorization;
+      }
+      return config;
+    });
+
+    return () => {
+      axios.interceptors.request.eject(interceptor);
+    };
+  }, [user, getIdToken]);
+
+  useEffect(() => {
     if (selectedUserId) {
       pomodoro.setUserId(selectedUserId);
     }
@@ -102,6 +124,18 @@ function App() {
       applyUsers([]);
     }
   };
+
+  const handleLogout = async () => {
+    await signOutFromApp();
+  };
+
+  if (initializing) {
+    return <LoadingOverlay message="Verificando acceso…" />;
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
 
   const handleStartFocus = (card: Card) => {
     setFocusCard(card);
@@ -202,6 +236,12 @@ function App() {
           <button onClick={() => setCurrentView('calendar')} disabled={currentView === 'calendar'}>Calendario</button>
           <button onClick={() => setCurrentView('zapier')} disabled={currentView === 'zapier'}>Zapier</button>
         </nav>
+        <div className="user-info">
+          <div className="user-meta">
+            <span>{user.displayName || user.email || 'Cuenta'}</span>
+          </div>
+          <button className="logout-button" onClick={handleLogout}>Salir</button>
+        </div>
         <div className="board-selector">
           {boards.length > 0 && (
             <select onChange={(e) => setCurrentBoardId(e.target.value)} value={currentBoardId || ''} name="boardSelector">
