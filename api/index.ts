@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import app from '../backend/dist/app.js';
+const app = require('../backend/dist/app.js').default;
 
 export const config = {
   api: {
