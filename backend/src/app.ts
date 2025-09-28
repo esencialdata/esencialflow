@@ -192,6 +192,7 @@ app.get('/api/users', async (req, res) => {
     const usersRef = db.collection('users');
     const snapshot = await usersRef.get();
     const users = snapshot.docs.map(doc => ({ userId: doc.id, ...doc.data() }));
+    console.log(`[API] /api/users -> ${users.length} registros`);
     res.json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -434,6 +435,7 @@ app.get('/api/boards', async (req, res) => {
     const boardsRef = db.collection('boards');
     const snapshot = await boardsRef.get();
     const boards = snapshot.docs.map(doc => ({ boardId: doc.id, ...doc.data() }));
+    console.log(`[API] /api/boards -> ${boards.length} registros`);
     res.json(boards);
   } catch (error) {
     console.error("Error fetching boards:", error);

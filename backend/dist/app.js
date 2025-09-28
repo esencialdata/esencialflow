@@ -218,6 +218,7 @@ app.get('/api/users', (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const usersRef = db.collection('users');
         const snapshot = yield usersRef.get();
         const users = snapshot.docs.map(doc => (Object.assign({ userId: doc.id }, doc.data())));
+        console.log(`[API] /api/users -> ${users.length} registros`);
         res.json(users);
     }
     catch (error) {
@@ -435,6 +436,7 @@ app.get('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function*
         const boardsRef = db.collection('boards');
         const snapshot = yield boardsRef.get();
         const boards = snapshot.docs.map(doc => (Object.assign({ boardId: doc.id }, doc.data())));
+        console.log(`[API] /api/boards -> ${boards.length} registros`);
         res.json(boards);
     }
     catch (error) {
