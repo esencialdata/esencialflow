@@ -23,6 +23,25 @@ const resolveStorageBucket = (serviceAccount?: ServiceAccountShape): string | un
   return 'esencial-flow-uploads-1234';
 };
 
+const parseServiceAccount = (raw: string): (ServiceAccountShape & admin.ServiceAccount) | null => {
+  const attempts: string[] = [];
+  attempts.push(raw);
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf8');
+    attempts.unshift(decoded);
+  } catch {}
+
+  for (const candidate of attempts) {
+    if (!candidate || typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      return JSON.parse(trimmed) as ServiceAccountShape & admin.ServiceAccount;
+    } catch {}
+  }
+  return null;
+};
+
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length > 0) {
     return;
@@ -54,7 +73,11 @@ const initializeFirebaseAdmin = () => {
   }
 
   try {
-    const parsed = JSON.parse(Buffer.from(serviceAccountString, 'base64').toString('ascii')) as ServiceAccountShape & admin.ServiceAccount;
+    const parsed = parseServiceAccount(serviceAccountString);
+    if (!parsed) {
+      console.error('FATAL: FIREBASE_SERVICE_ACCOUNT env var could not be parsed.');
+      return;
+    }
     const storageBucket = resolveStorageBucket(parsed);
     admin.initializeApp({
       credential: admin.credential.cert(parsed),

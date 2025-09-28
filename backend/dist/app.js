@@ -65,6 +65,27 @@ const resolveStorageBucket = (serviceAccount) => {
     }
     return 'esencial-flow-uploads-1234';
 };
+const parseServiceAccount = (raw) => {
+    const attempts = [];
+    attempts.push(raw);
+    try {
+        const decoded = Buffer.from(raw, 'base64').toString('utf8');
+        attempts.unshift(decoded);
+    }
+    catch (_a) { }
+    for (const candidate of attempts) {
+        if (!candidate || typeof candidate !== 'string')
+            continue;
+        const trimmed = candidate.trim();
+        if (!trimmed.startsWith('{'))
+            continue;
+        try {
+            return JSON.parse(trimmed);
+        }
+        catch (_b) { }
+    }
+    return null;
+};
 const initializeFirebaseAdmin = () => {
     if (admin.apps.length > 0) {
         return;
@@ -91,7 +112,11 @@ const initializeFirebaseAdmin = () => {
         }
     }
     try {
-        const parsed = JSON.parse(Buffer.from(serviceAccountString, 'base64').toString('ascii'));
+        const parsed = parseServiceAccount(serviceAccountString);
+        if (!parsed) {
+            console.error('FATAL: FIREBASE_SERVICE_ACCOUNT env var could not be parsed.');
+            return;
+        }
         const storageBucket = resolveStorageBucket(parsed);
         admin.initializeApp(Object.assign({ credential: admin.credential.cert(parsed) }, (storageBucket ? { storageBucket } : {})));
         console.log('Firebase Admin SDK initialized successfully from environment variable.');
