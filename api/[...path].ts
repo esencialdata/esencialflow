@@ -26,6 +26,8 @@ export const config = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Debug log to trace routing issues
+  console.log(`[API handler] path=${req.url}`);
   const app = await loadApp();
   return app(req, res);
 }
