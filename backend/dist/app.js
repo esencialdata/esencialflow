@@ -44,45 +44,76 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const axios_1 = __importDefault(require("axios"));
 const admin = __importStar(require("firebase-admin"));
-// TODO: Asegúrate de que tu archivo serviceAccountKey.json esté en backend/src/
-const serviceAccountKey_json_1 = __importDefault(require("./serviceAccountKey.json"));
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccountKey_json_1.default),
-    // Bucket de Cloud Storage donde se almacenarán los adjuntos
-    storageBucket: "esencial-flow-uploads-1234"
-});
+const resolveStorageBucket = (serviceAccount) => {
+    var _a, _b, _c;
+    const explicit = (_a = process.env.FIREBASE_STORAGE_BUCKET) === null || _a === void 0 ? void 0 : _a.trim();
+    if (explicit) {
+        return explicit;
+    }
+    if ((_b = serviceAccount === null || serviceAccount === void 0 ? void 0 : serviceAccount.storageBucket) === null || _b === void 0 ? void 0 : _b.trim()) {
+        return serviceAccount.storageBucket.trim();
+    }
+    const projectId = (_c = serviceAccount === null || serviceAccount === void 0 ? void 0 : serviceAccount.project_id) !== null && _c !== void 0 ? _c : process.env.FIREBASE_PROJECT_ID;
+    if (projectId === null || projectId === void 0 ? void 0 : projectId.trim()) {
+        return `${projectId.trim()}.appspot.com`;
+    }
+    return 'esencial-flow-uploads-1234';
+};
+const initializeFirebaseAdmin = () => {
+    if (admin.apps.length > 0) {
+        return;
+    }
+    const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!serviceAccountString) {
+        if (process.env.NODE_ENV === 'production') {
+            console.error('FATAL: FIREBASE_SERVICE_ACCOUNT env var not set. Firebase Admin SDK could not be initialized.');
+            return;
+        }
+        try {
+            const serviceAccount = require('./serviceAccountKey.json');
+            const storageBucket = resolveStorageBucket(serviceAccount);
+            admin.initializeApp(Object.assign({ credential: admin.credential.cert(serviceAccount) }, (storageBucket ? { storageBucket } : {})));
+            console.log('Firebase Admin SDK initialized using local serviceAccountKey.json');
+            if (!storageBucket) {
+                console.warn('No storage bucket configured. Attachment endpoints will be unavailable.');
+            }
+            return;
+        }
+        catch (error) {
+            console.error('Could not initialize Firebase Admin SDK. Missing serviceAccountKey.json and FIREBASE_SERVICE_ACCOUNT env var.', error);
+            return;
+        }
+    }
+    try {
+        const parsed = JSON.parse(Buffer.from(serviceAccountString, 'base64').toString('ascii'));
+        const storageBucket = resolveStorageBucket(parsed);
+        admin.initializeApp(Object.assign({ credential: admin.credential.cert(parsed) }, (storageBucket ? { storageBucket } : {})));
+        console.log('Firebase Admin SDK initialized successfully from environment variable.');
+        if (!storageBucket) {
+            console.warn('No storage bucket configured. Attachment endpoints will be unavailable.');
+        }
+    }
+    catch (error) {
+        console.error('Error initializing Firebase Admin SDK from environment variable:', error);
+    }
+};
+initializeFirebaseAdmin();
+const appInstance = admin.apps[0];
+const configuredBucket = (_a = appInstance === null || appInstance === void 0 ? void 0 : appInstance.options) === null || _a === void 0 ? void 0 : _a.storageBucket;
+const bucket = configuredBucket ? admin.storage().bucket(configuredBucket) : null;
+if (!configuredBucket) {
+    console.warn('Firebase storage bucket not configured. Attachment endpoints will be unavailable.');
+}
 const db = admin.firestore();
-const bucket = admin.storage().bucket();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-const authDisabled = process.env.AUTH_DISABLED === 'true';
-if (!authDisabled) {
-    app.use((req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-        if (req.method === 'OPTIONS') {
-            return next();
-        }
-        const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
-        const token = (authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer ')) ? authHeader.slice(7) : authHeader;
-        if (!token) {
-            return res.status(401).json({ message: 'Unauthorized' });
-        }
-        try {
-            const decoded = yield admin.auth().verifyIdToken(token);
-            req.user = decoded;
-            return next();
-        }
-        catch (error) {
-            console.error('Error verifying Firebase ID token:', error);
-            return res.status(401).json({ message: 'Unauthorized' });
-        }
-    }));
-}
 const PRIORITY_VALUES = ['low', 'medium', 'high'];
 const sanitizePriority = (value, fallback = 'medium') => {
     if (typeof value === 'string' && PRIORITY_VALUES.includes(value)) {
@@ -740,6 +771,9 @@ app.post('/api/cards/:cardId/request-upload-url', (req, res) => __awaiter(void 0
     if (!fileName || !fileType) {
         return res.status(400).json({ message: 'fileName and fileType are required' });
     }
+    if (!bucket) {
+        return res.status(503).json({ message: 'Storage bucket not configured.' });
+    }
     const filePath = `attachments/${cardId}/${Date.now()}-${fileName}`;
     const file = bucket.file(filePath);
     // No fijamos contentType en la firma para evitar errores de coincidencia de cabeceras
@@ -782,6 +816,9 @@ app.get('/api/cards/:cardId/attachments/signed-read', (req, res) => __awaiter(vo
         if (!filePath) {
             return res.status(400).json({ message: 'filePath is required' });
         }
+        if (!bucket) {
+            return res.status(503).json({ message: 'Storage bucket not configured.' });
+        }
         const file = bucket.file(filePath);
         const [url] = yield file.getSignedUrl({
             version: 'v4',
@@ -814,12 +851,17 @@ app.delete('/api/cards/:cardId/attachments/:attachmentId', (req, res) => __await
         const remaining = attachments.filter(a => a.attachmentId !== attachmentId);
         yield cardRef.update({ attachments: remaining });
         if (deleteObject === 'true' || deleteObject === '1') {
-            try {
-                yield bucket.file(attachmentId).delete({ ignoreNotFound: true });
+            if (!bucket) {
+                console.warn('Storage bucket not configured; skipping object deletion.');
             }
-            catch (e) {
-                console.error('Failed deleting object from bucket:', e);
-                // do not fail the request if object deletion fails
+            else {
+                try {
+                    yield bucket.file(attachmentId).delete({ ignoreNotFound: true });
+                }
+                catch (e) {
+                    console.error('Failed deleting object from bucket:', e);
+                    // do not fail the request if object deletion fails
+                }
             }
         }
         res.json({ ok: true });

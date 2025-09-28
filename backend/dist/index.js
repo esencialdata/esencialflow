@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
-const port = 3001;
+const port = Number(process.env.PORT || 3001);
 app_1.default.listen(port, () => {
     console.log(`Backend listening at http://localhost:${port}`);
 });
