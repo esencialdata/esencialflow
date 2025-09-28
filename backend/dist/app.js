@@ -74,11 +74,16 @@ const parseServiceAccount = (raw) => {
     }
     catch (_a) { }
     for (const candidate of attempts) {
-        if (!candidate || typeof candidate !== 'string')
+        if (!candidate || typeof candidate !== 'string') {
             continue;
-        const trimmed = candidate.trim();
-        if (!trimmed.startsWith('{'))
+        }
+        let trimmed = candidate.trim();
+        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+            trimmed = trimmed.slice(1, -1);
+        }
+        if (!trimmed.startsWith('{')) {
             continue;
+        }
         try {
             return JSON.parse(trimmed);
         }

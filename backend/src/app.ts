@@ -32,9 +32,16 @@ const parseServiceAccount = (raw: string): (ServiceAccountShape & admin.ServiceA
   } catch {}
 
   for (const candidate of attempts) {
-    if (!candidate || typeof candidate !== 'string') continue;
-    const trimmed = candidate.trim();
-    if (!trimmed.startsWith('{')) continue;
+    if (!candidate || typeof candidate !== 'string') {
+      continue;
+    }
+    let trimmed = candidate.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      trimmed = trimmed.slice(1, -1);
+    }
+    if (!trimmed.startsWith('{')) {
+      continue;
+    }
     try {
       return JSON.parse(trimmed) as ServiceAccountShape & admin.ServiceAccount;
     } catch {}
