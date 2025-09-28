@@ -554,6 +554,7 @@ app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, vo
         const listsRef = db.collection('lists').where('boardId', '==', boardId);
         const snapshot = yield listsRef.orderBy('position').get();
         const lists = snapshot.docs.map(doc => (Object.assign({ listId: doc.id }, doc.data())));
+        console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros`);
         res.json(lists);
     }
     catch (error) {

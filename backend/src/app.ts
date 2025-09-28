@@ -570,6 +570,7 @@ app.get('/api/boards/:boardId/lists', async (req, res) => {
     const listsRef = db.collection('lists').where('boardId', '==', boardId);
     const snapshot = await listsRef.orderBy('position').get();
     const lists = snapshot.docs.map(doc => ({ listId: doc.id, ...doc.data() }));
+    console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros`);
     res.json(lists);
   } catch (error) {
     console.error("Error fetching lists:", error);
