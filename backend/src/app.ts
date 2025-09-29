@@ -109,6 +109,37 @@ if (!configuredBucket) {
   console.warn('Firebase storage bucket not configured. Attachment endpoints will be unavailable.');
 }
 
+const ensureBucketCors = async () => {
+  if (!bucket) {
+    return;
+  }
+  const desiredOrigins = ['*'];
+  const desiredRule = {
+    origin: desiredOrigins,
+    method: ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'DELETE'],
+    responseHeader: ['Content-Type', 'x-goog-resumable'],
+    maxAgeSeconds: 3600,
+  };
+
+  try {
+    const [metadata] = await bucket.getMetadata();
+    const existingCors = Array.isArray(metadata.cors) ? metadata.cors : [];
+    const hasAllOrigins = existingCors.some((rule: any) => {
+      const ruleOrigins = Array.isArray(rule?.origin) ? rule.origin : [];
+      return ruleOrigins.includes('*') || desiredOrigins.every(origin => ruleOrigins.includes(origin));
+    });
+    if (hasAllOrigins) {
+      return;
+    }
+    await bucket.setMetadata({ cors: [desiredRule] });
+    console.log('Updated storage bucket CORS configuration for web uploads.');
+  } catch (error) {
+    console.error('Could not ensure storage bucket CORS configuration:', error);
+  }
+};
+
+void ensureBucketCors();
+
 const db = admin.firestore();
 
 const app = express();

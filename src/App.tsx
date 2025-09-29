@@ -27,6 +27,29 @@ import { API_URL } from './config/api';
 type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
 function App() {
+  const requiredAccessKey = (import.meta.env?.VITE_APP_ACCESS_KEY as string | undefined)?.trim() || 'esencial';
+  const [accessInput, setAccessInput] = useState('');
+  const [accessGranted, setAccessGranted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('esencial.access.gate') === 'allowed';
+    } catch {
+      return false;
+    }
+  });
+  const [accessError, setAccessError] = useState<string>('');
+
+  const handleAccessSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (accessInput.trim() === requiredAccessKey) {
+      try { localStorage.setItem('esencial.access.gate', 'allowed'); } catch {}
+      setAccessGranted(true);
+      setAccessError('');
+      setAccessInput('');
+      return;
+    }
+    setAccessError('Clave incorrecta');
+  };
+
   const [focusCard, setFocusCard] = useState<Card | null>(null);
   const [currentView, setCurrentView] = useState<View>('home');
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -189,6 +212,31 @@ function App() {
     setCurrentView('kanban');
     setTimeout(() => setFocusListId(null), 1500);
   };
+
+  if (!accessGranted) {
+    return (
+      <div className="App" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117' }}>
+        <form onSubmit={handleAccessSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: 'min(320px, 90vw)', padding: '32px', background: '#111826', borderRadius: '12px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)', textAlign: 'center' }}>
+          <img src={logoUrl} alt="Esencial Flow" style={{ maxWidth: '160px', alignSelf: 'center' }} />
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: '#f4f4f5', fontSize: '0.95rem' }}>
+            Clave de acceso
+            <input
+              type="password"
+              value={accessInput}
+              onChange={(e) => setAccessInput(e.target.value)}
+              placeholder="Ingresa la clave"
+              style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #1f2937', background: '#0f172a', color: '#f8fafc' }}
+              autoFocus
+            />
+          </label>
+          {accessError ? <span style={{ color: '#f87171', fontSize: '0.85rem' }}>{accessError}</span> : null}
+          <button type="submit" style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#1a73e8', color: '#f8fafc', fontWeight: 600, cursor: 'pointer' }}>
+            Acceder
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
