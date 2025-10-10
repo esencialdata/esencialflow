@@ -3,11 +3,11 @@ import { createPortal } from 'react-dom';
 import { Draggable } from 'react-beautiful-dnd';
 import { Card as CardType, User } from '../types/data';
 import './Card.css';
-import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from './ConfirmDialog';
 import { usePomodoro } from '../context/PomodoroContext';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 interface CardProps {
   card: CardType;
@@ -73,7 +73,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
     try {
       setBusy(true);
       const payload = { ...card, title: trimmed } as CardType;
-      await axios.put(`${API_URL}/cards/${card.id}`, payload);
+      await api.put(`${API_URL}/cards/${card.id}`, payload);
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: payload })); } catch {}
       showToast('Título actualizado', 'success');
       setIsEditingTitle(false);
@@ -86,7 +86,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
   const deleteCard = async () => {
     try {
       setBusy(true);
-      await axios.delete(`${API_URL}/cards/${card.id}`);
+      await api.delete(`${API_URL}/cards/${card.id}`);
       try { window.dispatchEvent(new CustomEvent('card:deleted', { detail: { id: card.id, listId: card.listId } })); } catch {}
       showToast('Tarjeta eliminada', 'success');
     } catch (e) {

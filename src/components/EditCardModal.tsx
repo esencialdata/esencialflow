@@ -3,11 +3,11 @@ import { Card, User, Attachment } from '../types/data';
 import './EditCardModal.css';
 import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
-import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import CardComments from './CardComments';
 import CardAttachments from './CardAttachments';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 interface EditCardModalProps {
   isOpen: boolean;
@@ -85,7 +85,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   const deleteFromModal = async () => {
     if (!card) return;
     try {
-      await axios.delete(`${API_URL}/cards/${card.id}`);
+      await api.delete(`${API_URL}/cards/${card.id}`);
       try { window.dispatchEvent(new CustomEvent('card:deleted', { detail: { id: card.id, listId: card.listId } })); } catch {}
       showToast('Tarjeta eliminada', 'success');
       onClose();

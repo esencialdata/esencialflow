@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { List } from '../types/data';
 import { useToast } from '../context/ToastContext';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 // Helper to format list dates (assuming lists also have createdAt/updatedAt)
 const formatListDates = (list: any): List => {
@@ -24,7 +24,7 @@ export const useLists = (boardId: string | null) => {
     }
     setIsLoading(true);
     try {
-      const response = await axios.get<any[]>(`${API_URL}/boards/${id}/lists`);
+      const response = await api.get<any[]>(`${API_URL}/boards/${id}/lists`);
       const formattedLists = response.data.map(formatListDates);
       setLists(formattedLists);
       setError(null);
@@ -48,7 +48,7 @@ export const useLists = (boardId: string | null) => {
       return undefined;
     }
     try {
-      const response = await axios.post<any>(`${API_URL}/boards/${boardId}/lists`, { name, position: lists.length });
+      const response = await api.post<any>(`${API_URL}/boards/${boardId}/lists`, { name, position: lists.length });
       const serverList = response.data;
       const normalized = { ...serverList, listId: serverList.listId || serverList.id };
       const newList = formatListDates(normalized);
@@ -65,7 +65,7 @@ export const useLists = (boardId: string | null) => {
 
   const handleUpdateList = async (listId: string, data: Partial<Pick<List, 'name' | 'position'>>) => {
     try {
-      const response = await axios.put<any>(`${API_URL}/lists/${listId}`, data);
+      const response = await api.put<any>(`${API_URL}/lists/${listId}`, data);
       const serverList = response.data;
       const normalized = { ...serverList, listId: serverList.listId || serverList.id };
       const updated = formatListDates(normalized);
@@ -78,7 +78,7 @@ export const useLists = (boardId: string | null) => {
 
   const handleDeleteList = async (listId: string) => {
     try {
-      await axios.delete(`${API_URL}/lists/${listId}`);
+      await api.delete(`${API_URL}/lists/${listId}`);
       setLists(prev => prev.filter(l => l.listId !== listId));
     } catch (err) {
       setError('Failed to delete list');

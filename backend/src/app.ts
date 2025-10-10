@@ -8,6 +8,8 @@ type ServiceAccountShape = {
   storageBucket?: string;
 };
 
+type AuthedRequest = express.Request & { user?: admin.auth.DecodedIdToken };
+
 const resolveStorageBucket = (serviceAccount?: ServiceAccountShape): string | undefined => {
   const explicit = process.env.FIREBASE_STORAGE_BUCKET?.trim();
   if (explicit) {
@@ -145,6 +147,31 @@ const db = admin.firestore();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const requireAuth: express.RequestHandler = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ message: 'Missing or invalid auth token' });
+    return;
+  }
+
+  const idToken = authHeader.slice('Bearer '.length).trim();
+  if (!idToken) {
+    res.status(401).json({ message: 'Missing or invalid auth token' });
+    return;
+  }
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    (req as AuthedRequest).user = decoded;
+    next();
+  } catch (error) {
+    console.error('Invalid auth token:', error);
+    res.status(401).json({ message: 'Invalid auth token' });
+  }
+};
+
+app.use('/api', requireAuth);
 
 const PRIORITY_VALUES = ['low', 'medium', 'high'] as const;
 type PriorityValue = typeof PRIORITY_VALUES[number];

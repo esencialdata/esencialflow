@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import { Comment, User } from '../types/data';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 interface CardCommentsProps {
   cardId: string;
@@ -34,7 +34,7 @@ const CardComments: React.FC<CardCommentsProps> = ({ cardId, users, currentUserI
   const fetchComments = async () => {
     try {
       setLoading(true);
-      const res = await axios.get<any[]>(`${API_URL}/cards/${cardId}/comments`);
+      const res = await api.get<any[]>(`${API_URL}/cards/${cardId}/comments`);
       const list = (res.data || []).map(mapComment);
       setComments(list);
       setError(null);
@@ -71,7 +71,7 @@ const CardComments: React.FC<CardCommentsProps> = ({ cardId, users, currentUserI
     if (!trimmed) return;
     try {
       const mentions = extractMentions(trimmed);
-      const res = await axios.post(`${API_URL}/cards/${cardId}/comments`, {
+      const res = await api.post(`${API_URL}/cards/${cardId}/comments`, {
         authorUserId: currentUserId,
         text: trimmed,
         mentions,
@@ -109,7 +109,7 @@ const CardComments: React.FC<CardCommentsProps> = ({ cardId, users, currentUserI
     try {
       setBusyId(c.id);
       const mentions = extractMentions(trimmed);
-      const res = await axios.put(`${API_URL}/cards/${cardId}/comments/${c.id}`, { text: trimmed, mentions });
+      const res = await api.put(`${API_URL}/cards/${cardId}/comments/${c.id}`, { text: trimmed, mentions });
       const updated = mapComment(res.data);
       setComments(prev => prev.map(x => (x.id === c.id ? updated : x)));
       if (mentions.length) {
@@ -131,7 +131,7 @@ const CardComments: React.FC<CardCommentsProps> = ({ cardId, users, currentUserI
     if (!confirm('¿Eliminar este comentario?')) return;
     try {
       setBusyId(c.id);
-      await axios.delete(`${API_URL}/cards/${cardId}/comments/${c.id}`);
+      await api.delete(`${API_URL}/cards/${cardId}/comments/${c.id}`);
       setComments(prev => prev.filter(x => x.id !== c.id));
       showToast('Comentario eliminado', 'success');
     } catch (e: any) {

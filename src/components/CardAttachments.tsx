@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useToast } from '../context/ToastContext';
 import Spinner from './Spinner';
 import { Attachment } from '../types/data';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 interface CardAttachmentsProps {
   cardId: string;
@@ -28,7 +28,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
       let signedUrl = '';
       let filePath = '';
       try {
-        const reqRes = await axios.post(`${API_URL}/cards/${cardId}/request-upload-url`, {
+        const reqRes = await api.post(`${API_URL}/cards/${cardId}/request-upload-url`, {
           fileName: file.name,
           fileType: file.type || 'application/octet-stream',
         });
@@ -76,7 +76,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
         createdAt: new Date().toISOString(),
       };
       try {
-        const res = await axios.post(`${API_URL}/cards/${cardId}/attachments`, attPayload);
+        const res = await api.post(`${API_URL}/cards/${cardId}/attachments`, attPayload);
         const saved = res.data as Attachment;
         onAttachmentsChange([...attachments, saved]);
         showToast('Adjunto agregado', 'success');
@@ -100,7 +100,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
     try {
       setOpening(a.attachmentId);
       const params = new URLSearchParams({ filePath: a.attachmentId });
-      const res = await axios.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
+      const res = await api.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
       const url = res.data?.url || a.url;
       window.open(url, '_blank', 'noopener');
     } catch (err) {
@@ -120,7 +120,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
         return;
       }
       const params = new URLSearchParams({ filePath: a.attachmentId });
-      const res = await axios.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
+      const res = await api.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
       const url = res.data?.url || a.url;
       setPreviewUrl(prev => ({ ...prev, [a.attachmentId]: url }));
     } catch (e) {
@@ -132,7 +132,7 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
   const deleteAttachment = async (a: Attachment) => {
     if (!confirm('¿Eliminar este adjunto?')) return;
     try {
-      await axios.delete(`${API_URL}/cards/${cardId}/attachments/${encodeURIComponent(a.attachmentId)}`, { params: { deleteObject: true } });
+      await api.delete(`${API_URL}/cards/${cardId}/attachments/${encodeURIComponent(a.attachmentId)}`, { params: { deleteObject: true } });
       const remaining = attachments.filter(x => x.attachmentId !== a.attachmentId);
       onAttachmentsChange(remaining);
       setError(null);

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Card as CardType, User } from '../types/data';
 import CardContent from './CardContent';
 import './MyDay.css';
 import LoadingOverlay from './LoadingOverlay';
 import { useHabits } from '../hooks/useHabits';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 interface MyDayProps {
   userId?: string; // optional: if missing, show all users' cards due today
@@ -63,7 +63,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
         const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
         const params = new URLSearchParams({ start: today.toISOString(), end: tomorrow.toISOString() });
         if (userId) params.set('userId', userId);
-        const response = await axios.get<any[]>(`${API_URL}/cards/search?${params.toString()}`);
+        const response = await api.get<any[]>(`${API_URL}/cards/search?${params.toString()}`);
         const filtered = response.data
           .map((c: any) => ({ ...c, dueDate: parseDate(c.dueDate) }))
           .filter((c: any) => !c.completed) as CardType[];

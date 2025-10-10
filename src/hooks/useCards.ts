@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { Card } from '../types/data';
 import { useToast } from '../context/ToastContext';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 // Robust date parser for fields that may come as Firestore Timestamp, ISO string, number, or Date
 const parseDate = (value: any): Date | undefined => {
@@ -46,7 +46,7 @@ export const useCards = (boardId: string | null) => {
     }
     setIsLoading(true);
     try {
-      const response = await axios.get<any[]>(`${API_URL}/boards/${id}/cards`);
+      const response = await api.get<any[]>(`${API_URL}/boards/${id}/cards`);
       const formattedCards = response.data.map(formatCardDates);
       
       // Group cards by listId and sort by position (fallback to createdAt)
@@ -126,7 +126,7 @@ export const useCards = (boardId: string | null) => {
 
   const handleCreateCard = async (listId: string, cardData: Omit<Card, 'id' | 'listId' | 'createdAt' | 'updatedAt'>) => {
     try {
-      const response = await axios.post<any>(`${API_URL}/lists/${listId}/cards`, cardData);
+      const response = await api.post<any>(`${API_URL}/lists/${listId}/cards`, cardData);
       const newCard = formatCardDates(response.data);
       setCardsByList(prev => {
         const updatedCards = { ...prev };
@@ -146,7 +146,7 @@ export const useCards = (boardId: string | null) => {
 
   const handleUpdateCard = async (cardId: string, data: Partial<Card>) => {
     try {
-      const response = await axios.put<any>(`${API_URL}/cards/${cardId}`, data);
+      const response = await api.put<any>(`${API_URL}/cards/${cardId}`, data);
       const updated = formatCardDates(response.data);
       setCardsByList(prev => {
         const next: Record<string, Card[]> = {};
@@ -169,7 +169,7 @@ export const useCards = (boardId: string | null) => {
     // Persist positions in a single batch request for performance
     try {
       const updates = cards.map((c, idx) => ({ cardId: c.id, listId, position: idx }));
-      await axios.post(`${API_URL}/cards/reorder-batch`, { updates });
+      await api.post(`${API_URL}/cards/reorder-batch`, { updates });
     } catch (err) {
       console.error('Failed to persist list order:', err);
     }

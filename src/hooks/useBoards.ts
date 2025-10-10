@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Board } from '../types/data';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 // Helper to format board dates from Firestore Timestamps
 const formatBoardDates = (board: any): Board => {
@@ -26,7 +26,7 @@ export const useBoards = () => {
     const fetchBoardsAndSetInitial = async () => {
         setIsLoading(true);
         try {
-          const response = await axios.get<any[]>(`${API_URL}/boards`);
+          const response = await api.get<any[]>(`${API_URL}/boards`);
           const formattedBoards = response.data.map(formatBoardDates);
           setBoards(formattedBoards);
           
@@ -47,7 +47,7 @@ export const useBoards = () => {
   const handleCreateBoard = async (boardData: Omit<Board, 'boardId' | 'createdAt' | 'updatedAt'>) => {
     try {
       const payload = { ...boardData, priority: boardData.priority || 'medium' };
-      const response = await axios.post<any>(`${API_URL}/boards`, payload);
+      const response = await api.post<any>(`${API_URL}/boards`, payload);
       const newBoard = formatBoardDates(response.data);
       setBoards(prev => [...prev, newBoard]);
       setCurrentBoardId(newBoard.boardId);
@@ -61,7 +61,7 @@ export const useBoards = () => {
   const handleUpdateBoard = async (boardData: Partial<Board>) => {
     if (!editingBoard) return;
     try {
-      const response = await axios.put<any>(`${API_URL}/boards/${editingBoard.boardId}`, boardData);
+      const response = await api.put<any>(`${API_URL}/boards/${editingBoard.boardId}`, boardData);
       const updatedBoard = formatBoardDates(response.data);
       setBoards(prev => prev.map(b => b.boardId === editingBoard.boardId ? updatedBoard : b));
       setEditingBoard(null);
@@ -73,7 +73,7 @@ export const useBoards = () => {
 
   const handleDeleteBoard = async (boardId: string) => {
     try {
-      await axios.delete(`${API_URL}/boards/${boardId}`);
+      await api.delete(`${API_URL}/boards/${boardId}`);
       const newBoards = boards.filter(b => b.boardId !== boardId);
       setBoards(newBoards);
 

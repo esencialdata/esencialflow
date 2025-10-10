@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import KanbanBoard from './components/KanbanBoard';
@@ -14,7 +14,6 @@ import ZapierIntegration from './components/ZapierIntegration';
 import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
 import { Card, User } from './types/data';
-import axios from 'axios';
 import logoUrl from '../logo_esencial_w.svg';
 import FocusWidget from './components/FocusWidget';
 import { usePomodoro } from './context/PomodoroContext';
@@ -23,31 +22,51 @@ import { useToast } from './context/ToastContext';
 import ConfirmDialog from './components/ConfirmDialog';
 import LoadingOverlay from './components/LoadingOverlay';
 import { API_URL } from './config/api';
+import { api } from './config/http';
+import { auth } from './config/firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
 function App() {
-  const requiredAccessKey = (import.meta.env?.VITE_APP_ACCESS_KEY as string | undefined)?.trim() || 'esencial';
-  const [accessInput, setAccessInput] = useState('');
-  const [accessGranted, setAccessGranted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('esencial.access.gate') === 'allowed';
-    } catch {
-      return false;
-    }
-  });
-  const [accessError, setAccessError] = useState<string>('');
+  const [authStateChecked, setAuthStateChecked] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState(auth.currentUser);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
 
-  const handleAccessSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      setFirebaseUser(user);
+      setAuthStateChecked(true);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleLoginSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (accessInput.trim() === requiredAccessKey) {
-      try { localStorage.setItem('esencial.access.gate', 'allowed'); } catch {}
-      setAccessGranted(true);
-      setAccessError('');
-      setAccessInput('');
-      return;
+    setLoginError(null);
+    setLoginBusy(true);
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+    } catch (error: any) {
+      console.error('No se pudo iniciar sesión:', error);
+      const message = error?.code === 'auth/invalid-credential'
+        ? 'Correo o contraseña incorrectos'
+        : error?.message || 'No se pudo iniciar sesión';
+      setLoginError(message);
+    } finally {
+      setLoginBusy(false);
     }
-    setAccessError('Clave incorrecta');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('No se pudo cerrar sesión:', error);
+    }
   };
 
   const [focusCard, setFocusCard] = useState<Card | null>(null);
@@ -107,8 +126,12 @@ function App() {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (firebaseUser) {
+      fetchUsers();
+    } else {
+      setUsers([]);
+    }
+  }, [firebaseUser]);
 
   useEffect(() => {
     if (selectedUserId) {
@@ -118,7 +141,7 @@ function App() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get<User[]>(`${API_URL}/users`);
+      const res = await api.get<User[]>(`${API_URL}/users`);
       applyUsers(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -151,7 +174,7 @@ function App() {
   const exportBoard = async () => {
     if (!currentBoardId) return;
     try {
-      const res = await axios.get(`${API_URL}/boards/${currentBoardId}/export`);
+      const res = await api.get(`${API_URL}/boards/${currentBoardId}/export`);
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -170,7 +193,7 @@ function App() {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      const res = await axios.post(`${API_URL}/boards/import`, json);
+      const res = await api.post(`${API_URL}/boards/import`, json);
       const newBoardId = res.data?.newBoardId;
       if (newBoardId) {
         await reloadBoardsAfterImport(newBoardId);
@@ -193,7 +216,7 @@ function App() {
       if (!updatedCard.assignedToUserId && users.length === 1) {
         updatedCard.assignedToUserId = users[0].userId;
       }
-      await axios.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
+      await api.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch {}
       setEditingCard(null);
       if (currentBoardId) {
@@ -213,25 +236,45 @@ function App() {
     setTimeout(() => setFocusListId(null), 1500);
   };
 
-  if (!accessGranted) {
+  const isAuthenticated = useMemo(() => authStateChecked && !!firebaseUser, [authStateChecked, firebaseUser]);
+
+  if (!isAuthenticated) {
+    if (!authStateChecked) {
+      return (
+        <div className="App" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', color: '#f1f5f9' }}>
+          Cargando…
+        </div>
+      );
+    }
+
     return (
       <div className="App" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117' }}>
-        <form onSubmit={handleAccessSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: 'min(320px, 90vw)', padding: '32px', background: '#111826', borderRadius: '12px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)', textAlign: 'center' }}>
+        <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: 'min(360px, 90vw)', padding: '32px', background: '#111826', borderRadius: '12px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)', textAlign: 'center' }}>
           <img src={logoUrl} alt="Esencial Flow" style={{ maxWidth: '160px', alignSelf: 'center' }} />
           <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: '#f4f4f5', fontSize: '0.95rem' }}>
-            Clave de acceso
+            Correo electrónico
             <input
-              type="password"
-              value={accessInput}
-              onChange={(e) => setAccessInput(e.target.value)}
-              placeholder="Ingresa la clave"
+              type="email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="tu@correo.com"
               style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #1f2937', background: '#0f172a', color: '#f8fafc' }}
               autoFocus
             />
           </label>
-          {accessError ? <span style={{ color: '#f87171', fontSize: '0.85rem' }}>{accessError}</span> : null}
-          <button type="submit" style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#1a73e8', color: '#f8fafc', fontWeight: 600, cursor: 'pointer' }}>
-            Acceder
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: '#f4f4f5', fontSize: '0.95rem' }}>
+            Contraseña
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="Ingresa tu contraseña"
+              style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #1f2937', background: '#0f172a', color: '#f8fafc' }}
+            />
+          </label>
+          {loginError ? <span style={{ color: '#f87171', fontSize: '0.85rem' }}>{loginError}</span> : null}
+          <button type="submit" style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#1a73e8', color: '#f8fafc', fontWeight: 600, cursor: 'pointer' }} disabled={loginBusy}>
+            {loginBusy ? 'Ingresando…' : 'Acceder'}
           </button>
         </form>
       </div>
@@ -282,6 +325,10 @@ function App() {
               <button onClick={() => setConfirmDeleteBoard({ open: true, boardId: currentBoardId, busy: false })}>Eliminar Tablero</button>
             </>
           )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ color: '#cbd5f5', fontSize: '0.9rem' }}>{firebaseUser?.email}</span>
+          <button onClick={handleLogout}>Salir</button>
         </div>
       </header>
       <main className="App-main">

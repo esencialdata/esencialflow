@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import axios from 'axios';
 import { Card } from '../types/data';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 type Phase = 'focus' | 'break';
 
@@ -92,9 +92,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (phase === 'focus') {
       if (sessionId) {
         try {
-          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
+          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
           if (activeCard) {
-            await axios.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: focusLen });
+            await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: focusLen });
           }
         } catch (e) {
           console.error('Failed to complete timer session', e);
@@ -108,7 +108,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else { // phase === 'break'
       if (sessionId) {
         try {
-          await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: breakLen });
+          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: breakLen });
         } catch (e) {
           console.error('Failed to complete break session', e);
         } finally {
@@ -158,7 +158,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (!sessionId) {
       try {
-        const res = await axios.post(`${API_URL}/timer-sessions`, {
+        const res = await api.post(`${API_URL}/timer-sessions`, {
           cardId: activeCard.id,
           userId: userId,
           type: phase,
@@ -184,9 +184,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (sessionId) {
       try {
         const elapsedMinutes = Math.round(((total - remainingSec) / 60) * 10) / 10;
-        await axios.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
+        await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
         if (activeCard && elapsedMinutes > 0 && phase === 'focus') {
-          await axios.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
+          await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
         }
       } catch (e) {
         console.error('Failed to end timer session', e);

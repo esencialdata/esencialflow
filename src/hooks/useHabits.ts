@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
 import { HabitDailyStatus } from '../types/data';
 import { useToast } from '../context/ToastContext';
 import { API_URL } from '../config/api';
+import { api } from '../config/http';
 
 const parseDate = (value: any): Date | undefined => {
   if (!value) return undefined;
@@ -81,7 +81,7 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
   const fetchDailyHabits = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/habits/daily`, {
+      const response = await api.get(`${API_URL}/habits/daily`, {
         params: {
           date: dateKey,
           ...(userId ? { userId } : {}),
@@ -118,7 +118,7 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
       }
       setIsCreating(true);
       try {
-        await axios.post(`${API_URL}/habits`, {
+        await api.post(`${API_URL}/habits`, {
           name: trimmed,
           description: description?.trim() || '',
           userId,
@@ -146,14 +146,14 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
       setPendingHabitId(habitId);
       try {
         if (shouldComplete) {
-          const response = await axios.post(`${API_URL}/habits/${habitId}/check`, {
+          const response = await api.post(`${API_URL}/habits/${habitId}/check`, {
             date: dateKey,
             userId,
           });
           const completedAt = parseDate(response.data?.completedAt) || new Date();
           setHabits(prev => prev.map(h => (h.id === habitId ? { ...h, completed: true, completedAt } : h)));
         } else {
-          await axios.delete(`${API_URL}/habits/${habitId}/check`, {
+          await api.delete(`${API_URL}/habits/${habitId}/check`, {
             params: { date: dateKey, userId },
           });
           setHabits(prev => prev.map(h => (h.id === habitId ? { ...h, completed: false, completedAt: null } : h)));
@@ -181,7 +181,7 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
       }
       setUpdatingHabitId(habitId);
       try {
-        await axios.put(`${API_URL}/habits/${habitId}`, {
+        await api.put(`${API_URL}/habits/${habitId}`, {
           name: trimmed,
           description: description?.trim() || '',
         });
@@ -204,7 +204,7 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
     async (habitId: string): Promise<boolean> => {
       setUpdatingHabitId(habitId);
       try {
-        await axios.delete(`${API_URL}/habits/${habitId}`);
+        await api.delete(`${API_URL}/habits/${habitId}`);
         setHabits(prev => prev.filter(h => h.id !== habitId));
         showToast('Hábito eliminado', 'success');
         return true;
