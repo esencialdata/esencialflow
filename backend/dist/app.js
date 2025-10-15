@@ -50,6 +50,121 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const axios_1 = __importDefault(require("axios"));
 const admin = __importStar(require("firebase-admin"));
+const getUserIdFromRequest = (req) => {
+    var _a;
+    const uid = (_a = req.user) === null || _a === void 0 ? void 0 : _a.uid;
+    if (typeof uid === 'string' && uid.trim()) {
+        return uid.trim();
+    }
+    return null;
+};
+const extractIdsFromUnknown = (value) => {
+    if (!value)
+        return [];
+    const ids = [];
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            if (typeof item === 'string' && item.trim()) {
+                ids.push(item.trim());
+                continue;
+            }
+            if (item && typeof item === 'object') {
+                const candidate = item;
+                if (typeof candidate.userId === 'string' && candidate.userId.trim()) {
+                    ids.push(candidate.userId.trim());
+                }
+                if (typeof candidate.uid === 'string' && candidate.uid.trim()) {
+                    ids.push(candidate.uid.trim());
+                }
+                if (typeof candidate.id === 'string' && candidate.id.trim()) {
+                    ids.push(candidate.id.trim());
+                }
+            }
+        }
+        return ids;
+    }
+    if (typeof value === 'object') {
+        for (const maybe of Object.values(value)) {
+            if (typeof maybe === 'string' && maybe.trim()) {
+                ids.push(maybe.trim());
+            }
+            else if (maybe && typeof maybe === 'object') {
+                const nested = extractIdsFromUnknown(maybe);
+                ids.push(...nested);
+            }
+        }
+    }
+    return ids;
+};
+const collectBoardMemberIds = (board) => {
+    const candidates = ['memberIds', 'members', 'collaboratorIds', 'sharedWithUserIds', 'participantIds', 'userIds', 'users'];
+    const unique = new Set();
+    const ownerId = board === null || board === void 0 ? void 0 : board.ownerId;
+    if (typeof ownerId === 'string' && ownerId.trim()) {
+        unique.add(ownerId.trim());
+    }
+    for (const field of candidates) {
+        if (!Object.prototype.hasOwnProperty.call(board, field)) {
+            continue;
+        }
+        const value = board[field];
+        for (const id of extractIdsFromUnknown(value)) {
+            if (id) {
+                unique.add(id);
+            }
+        }
+    }
+    return Array.from(unique);
+};
+const userHasBoardAccess = (board, userId, userEmail) => {
+    if (userId) {
+        const members = collectBoardMemberIds(board);
+        if (members.includes(userId)) {
+            return true;
+        }
+    }
+    if (userEmail) {
+        const normalizedEmail = userEmail.trim().toLowerCase();
+        if (normalizedEmail) {
+            const emailCandidates = [];
+            if (typeof board.ownerEmail === 'string')
+                emailCandidates.push(board.ownerEmail);
+            if (typeof board.createdByEmail === 'string')
+                emailCandidates.push(board.createdByEmail);
+            if (board.owner && typeof board.owner === 'object') {
+                const ownerObj = board.owner;
+                if (typeof ownerObj.email === 'string') {
+                    emailCandidates.push(ownerObj.email);
+                }
+            }
+            if (Array.isArray(board.members)) {
+                for (const member of board.members) {
+                    if (member && typeof member === 'object') {
+                        if (typeof member.email === 'string') {
+                            emailCandidates.push(member.email);
+                        }
+                    }
+                }
+            }
+            if (emailCandidates.some(val => typeof val === 'string' && val.trim().toLowerCase() === normalizedEmail)) {
+                return true;
+            }
+        }
+    }
+    return false;
+};
+const sanitizeMemberIds = (incoming, ownerId) => {
+    const ids = new Set();
+    for (const id of extractIdsFromUnknown(incoming)) {
+        if (id) {
+            ids.add(id);
+        }
+    }
+    if (ownerId) {
+        ids.add(ownerId);
+    }
+    return Array.from(ids);
+};
 const resolveStorageBucket = (serviceAccount) => {
     var _a, _b, _c;
     const explicit = (_a = process.env.FIREBASE_STORAGE_BUCKET) === null || _a === void 0 ? void 0 : _a.trim();
@@ -173,6 +288,28 @@ const db = admin.firestore();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+const requireAuth = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    const authHeader = req.headers.authorization;
+    if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer '))) {
+        res.status(401).json({ message: 'Missing or invalid auth token' });
+        return;
+    }
+    const idToken = authHeader.slice('Bearer '.length).trim();
+    if (!idToken) {
+        res.status(401).json({ message: 'Missing or invalid auth token' });
+        return;
+    }
+    try {
+        const decoded = yield admin.auth().verifyIdToken(idToken);
+        req.user = decoded;
+        next();
+    }
+    catch (error) {
+        console.error('Invalid auth token:', error);
+        res.status(401).json({ message: 'Invalid auth token' });
+    }
+});
+app.use('/api', requireAuth);
 const PRIORITY_VALUES = ['low', 'medium', 'high'];
 const sanitizePriority = (value, fallback = 'medium') => {
     if (typeof value === 'string' && PRIORITY_VALUES.includes(value)) {
@@ -461,11 +598,25 @@ app.delete('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0,
 }));
 // Boards API
 app.get('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const boardsRef = db.collection('boards');
         const snapshot = yield boardsRef.get();
-        const boards = snapshot.docs.map(doc => (Object.assign({ boardId: doc.id }, doc.data())));
-        console.log(`[API] /api/boards -> ${boards.length} registros`);
+        const boards = snapshot.docs
+            .map(doc => {
+            var _a;
+            const data = (_a = doc.data()) !== null && _a !== void 0 ? _a : {};
+            return Object.assign({ boardId: doc.id }, data);
+        })
+            .filter(board => userHasBoardAccess(board, userId, userEmail));
+        console.log(`[API] /api/boards -> ${boards.length} registros visibles para ${userId}`);
         res.json(boards);
     }
     catch (error) {
@@ -474,16 +625,28 @@ app.get('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 }));
 app.get('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const { boardId } = req.params;
         const boardRef = db.collection('boards').doc(boardId);
         const doc = yield boardRef.get();
         if (!doc.exists) {
             res.status(404).json({ message: "Board not found" });
+            return;
         }
-        else {
-            res.json(Object.assign({ boardId: doc.id }, doc.data()));
+        const boardData = Object.assign({ boardId: doc.id }, doc.data());
+        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+            res.status(403).json({ message: 'Board not accessible' });
+            return;
         }
+        res.json(boardData);
     }
     catch (error) {
         console.error("Error fetching board:", error);
@@ -491,12 +654,28 @@ app.get('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.post('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
-        const newBoardData = Object.assign(Object.assign({}, req.body), { priority: sanitizePriority((_a = req.body) === null || _a === void 0 ? void 0 : _a.priority, 'medium'), createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        const body = (_a = req.body) !== null && _a !== void 0 ? _a : {};
+        const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Nuevo tablero';
+        const description = typeof body.description === 'string' ? body.description : '';
+        const visibility = body.visibility === 'public' ? 'public' : 'private';
+        const memberIds = sanitizeMemberIds(body.memberIds, userId);
+        const priority = sanitizePriority(body === null || body === void 0 ? void 0 : body.priority, 'medium');
+        const ownerEmail = typeof ((_b = authedReq.user) === null || _b === void 0 ? void 0 : _b.email) === 'string' ? authedReq.user.email.trim().toLowerCase() : null;
+        const newBoardData = Object.assign(Object.assign({ name,
+            description,
+            visibility, ownerId: userId, memberIds,
+            priority }, (ownerEmail ? { ownerEmail } : {})), { createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         const docRef = yield db.collection('boards').add(newBoardData);
-        const newBoard = Object.assign({ boardId: docRef.id }, newBoardData);
-        res.status(201).json(newBoard);
+        const created = yield docRef.get();
+        res.status(201).json(Object.assign({ boardId: docRef.id }, created.data()));
     }
     catch (error) {
         console.error("Error creating board:", error);
@@ -504,13 +683,50 @@ app.post('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function
     }
 }));
 app.put('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const { boardId } = req.params;
-        const updatedBoardData = Object.assign(Object.assign(Object.assign({}, req.body), (Object.prototype.hasOwnProperty.call(req.body, 'priority')
-            ? { priority: sanitizePriority(req.body.priority) }
-            : {})), { updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-        yield db.collection('boards').doc(boardId).update(updatedBoardData);
-        res.json(Object.assign({ boardId: boardId }, updatedBoardData));
+        const boardRef = db.collection('boards').doc(boardId);
+        const snap = yield boardRef.get();
+        if (!snap.exists) {
+            res.status(404).json({ message: "Board not found" });
+            return;
+        }
+        const existing = (_a = snap.data()) !== null && _a !== void 0 ? _a : {};
+        if (existing.ownerId !== userId) {
+            res.status(403).json({ message: "Only the owner can update this board" });
+            return;
+        }
+        const body = (_b = req.body) !== null && _b !== void 0 ? _b : {};
+        const updates = {};
+        if (Object.prototype.hasOwnProperty.call(body, 'name') && typeof body.name === 'string') {
+            updates.name = body.name.trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'description') && typeof body.description === 'string') {
+            updates.description = body.description;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'visibility') && body.visibility === 'public') {
+            updates.visibility = 'public';
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'visibility') && body.visibility !== 'public') {
+            updates.visibility = 'private';
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'priority')) {
+            updates.priority = sanitizePriority(body.priority);
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'memberIds')) {
+            updates.memberIds = sanitizeMemberIds(body.memberIds, userId);
+        }
+        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        yield boardRef.update(updates);
+        const updatedSnap = yield boardRef.get();
+        res.json(Object.assign({ boardId }, updatedSnap.data()));
     }
     catch (error) {
         console.error("Error updating board:", error);
@@ -518,7 +734,25 @@ app.put('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.delete('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     const { boardId } = req.params;
+    const boardRef = db.collection('boards').doc(boardId);
+    const snapshot = yield boardRef.get();
+    if (!snapshot.exists) {
+        res.status(404).json({ message: 'Board not found' });
+        return;
+    }
+    const data = (_a = snapshot.data()) !== null && _a !== void 0 ? _a : {};
+    if (data.ownerId !== userId) {
+        res.status(403).json({ message: 'Only the owner can delete this board' });
+        return;
+    }
     const batch = db.batch();
     try {
         console.log(`Atomically deleting board ${boardId} and all its contents...`);
@@ -539,7 +773,6 @@ app.delete('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 
             }
         }
         // 3. Add the board itself to the batch
-        const boardRef = db.collection('boards').doc(boardId);
         batch.delete(boardRef);
         // 4. Commit the atomic batch
         yield batch.commit();
@@ -558,12 +791,31 @@ app.delete('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 
 }));
 // GET all cards for a specific board (efficiently)
 app.get('/api/boards/:boardId/cards', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const { boardId } = req.params;
+        const boardSnap = yield db.collection('boards').doc(boardId).get();
+        if (!boardSnap.exists) {
+            res.status(404).json({ message: 'Board not found' });
+            return;
+        }
+        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
+        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+            res.status(403).json({ message: 'Board not accessible' });
+            return;
+        }
         // Find all lists for the given boardId
         const listsSnapshot = yield db.collection('lists').where('boardId', '==', boardId).get();
         if (listsSnapshot.empty) {
-            return res.json([]);
+            res.json([]);
+            return;
         }
         const listIds = listsSnapshot.docs.map(doc => doc.id);
         // Find all cards that belong to any of those lists
@@ -578,12 +830,30 @@ app.get('/api/boards/:boardId/cards', (req, res) => __awaiter(void 0, void 0, vo
 }));
 // Lists API
 app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const { boardId } = req.params;
+        const boardSnap = yield db.collection('boards').doc(boardId).get();
+        if (!boardSnap.exists) {
+            res.status(404).json({ message: 'Board not found' });
+            return;
+        }
+        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
+        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+            res.status(403).json({ message: 'Board not accessible' });
+            return;
+        }
         const listsRef = db.collection('lists').where('boardId', '==', boardId);
         const snapshot = yield listsRef.orderBy('position').get();
         const lists = snapshot.docs.map(doc => (Object.assign({ listId: doc.id }, doc.data())));
-        console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros`);
+        console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros visibles para ${userId}`);
         res.json(lists);
     }
     catch (error) {
@@ -592,8 +862,26 @@ app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, vo
     }
 }));
 app.post('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
         const { boardId } = req.params;
+        const boardSnap = yield db.collection('boards').doc(boardId).get();
+        if (!boardSnap.exists) {
+            res.status(404).json({ message: 'Board not found' });
+            return;
+        }
+        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
+        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+            res.status(403).json({ message: 'Board not accessible' });
+            return;
+        }
         const newListData = Object.assign(Object.assign({}, req.body), { boardId, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         const docRef = yield db.collection('lists').add(newListData);
         const newList = Object.assign({ id: docRef.id }, newListData);
@@ -1188,6 +1476,14 @@ app.get('/api/boards/:boardId/export', (req, res) => __awaiter(void 0, void 0, v
 }));
 // Import board from JSON (expects shape returned by export)
 app.post('/api/boards/import', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+    const ownerEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email.trim().toLowerCase() : null;
     try {
         const payload = req.body || {};
         const srcBoard = payload.board;
@@ -1196,15 +1492,9 @@ app.post('/api/boards/import', (req, res) => __awaiter(void 0, void 0, void 0, f
         if (!srcBoard || !srcBoard.name) {
             return res.status(400).json({ message: 'Invalid payload: board is required' });
         }
+        const incomingMembers = (_g = ((_f = (_e = (_d = (_c = (_b = srcBoard.memberIds) !== null && _b !== void 0 ? _b : srcBoard.members) !== null && _c !== void 0 ? _c : srcBoard.sharedWithUserIds) !== null && _d !== void 0 ? _d : srcBoard.participantIds) !== null && _e !== void 0 ? _e : srcBoard.userIds) !== null && _f !== void 0 ? _f : srcBoard.users)) !== null && _g !== void 0 ? _g : [];
         // 1) Create new board
-        const newBoardData = {
-            name: srcBoard.name + ' (imported)',
-            description: srcBoard.description || '',
-            ownerId: srcBoard.ownerId || 'user-1',
-            visibility: srcBoard.visibility || 'private',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        };
+        const newBoardData = Object.assign(Object.assign({ name: `${srcBoard.name} (imported)`, description: srcBoard.description || '', ownerId: userId, memberIds: sanitizeMemberIds(incomingMembers, userId), visibility: srcBoard.visibility === 'public' ? 'public' : 'private', priority: sanitizePriority(srcBoard === null || srcBoard === void 0 ? void 0 : srcBoard.priority, 'medium') }, (ownerEmail ? { ownerEmail } : {})), { createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         const newBoardRef = yield db.collection('boards').add(newBoardData);
         const newBoardId = newBoardRef.id;
         // 2) Create lists mapping

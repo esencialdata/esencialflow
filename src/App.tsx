@@ -25,6 +25,7 @@ import { API_URL } from './config/api';
 import { api } from './config/http';
 import { auth } from './config/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { generateColorFromId, getUserInitials } from './utils/user';
 
 type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
 
@@ -76,6 +77,7 @@ function App() {
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [cardsVersion, setCardsVersion] = useState(0);
   const [focusListId, setFocusListId] = useState<string | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const {
     boards,
     currentBoardId,
@@ -89,7 +91,7 @@ function App() {
     handleCreateBoard,
     handleUpdateBoard,
     handleDeleteBoard,
-  } = useBoards();
+  } = useBoards(firebaseUser?.uid);
 
   const { cards, isLoading: cardsLoading, error: cardsError, fetchCards: reloadCards } = useCards(currentBoardId);
   const pomodoro = usePomodoro();
@@ -237,6 +239,36 @@ function App() {
   };
 
   const isAuthenticated = useMemo(() => authStateChecked && !!firebaseUser, [authStateChecked, firebaseUser]);
+  const userAvatarInitials = useMemo(() => {
+    const source = firebaseUser?.displayName || firebaseUser?.email || '';
+    return getUserInitials(source);
+  }, [firebaseUser?.displayName, firebaseUser?.email]);
+
+  const userAvatarColor = useMemo(() => {
+    const seed = firebaseUser?.uid || firebaseUser?.email || 'esencial-user';
+    return generateColorFromId(seed);
+  }, [firebaseUser?.uid, firebaseUser?.email]);
+
+  const userAvatarTitle = firebaseUser?.displayName || firebaseUser?.email || 'Usuario';
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) {
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!userMenuRef.current) {
+        return;
+      }
+      if (!userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [userMenuOpen]);
 
   if (!isAuthenticated) {
     if (!authStateChecked) {
@@ -326,9 +358,30 @@ function App() {
             </>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ color: '#cbd5f5', fontSize: '0.9rem' }}>{firebaseUser?.email}</span>
-          <button onClick={handleLogout}>Salir</button>
+        <div className="user-menu" ref={userMenuRef}>
+          <button
+            type="button"
+            className="user-avatar-button"
+            onClick={() => setUserMenuOpen(prev => !prev)}
+            aria-haspopup="true"
+            aria-expanded={userMenuOpen}
+            title={userAvatarTitle}
+          >
+            <div className="user-avatar" style={{ backgroundColor: userAvatarColor }}>
+              {firebaseUser?.photoURL ? (
+                <img src={firebaseUser.photoURL} alt={userAvatarTitle} />
+              ) : (
+                userAvatarInitials
+              )}
+            </div>
+          </button>
+          {userMenuOpen && (
+            <div className="user-menu-dropdown">
+              <button type="button" onClick={() => { setUserMenuOpen(false); handleLogout(); }}>
+                Salir
+              </button>
+            </div>
+          )}
         </div>
       </header>
       <main className="App-main">
@@ -385,6 +438,7 @@ function App() {
       <CreateBoardModal
         isOpen={isCreatingBoard}
         onClose={() => setIsCreatingBoard(false)}
+        currentUserId={firebaseUser?.uid ?? ''}
         onSubmit={handleCreateBoard}
       />
 

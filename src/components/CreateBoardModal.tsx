@@ -4,10 +4,11 @@ import { Board } from '../types/data';
 interface CreateBoardModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentUserId: string;
   onSubmit: (boardData: Omit<Board, 'boardId' | 'createdAt' | 'updatedAt'>) => void;
 }
 
-const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, onSubmit }) => {
+const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, currentUserId, onSubmit }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('private');
@@ -17,8 +18,11 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ isOpen, onClose, on
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // A real app would get ownerId from auth context
-    const ownerId = 'user-1'; // Placeholder
+    if (!currentUserId) {
+      console.error('Cannot create board without a current user id');
+      return;
+    }
+    const ownerId = currentUserId;
     onSubmit({ name, description, visibility, ownerId, priority });
     setName('');
     setDescription('');

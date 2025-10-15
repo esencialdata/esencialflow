@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card as CardType, User } from '../types/data';
 import './Card.css';
+import { generateColorFromId, getUserInitials } from '../utils/user';
 
 interface CardContentProps {
   card: CardType;
@@ -8,25 +9,6 @@ interface CardContentProps {
   onClick: (e: React.MouseEvent) => void;
   onStartFocus: (e: React.MouseEvent) => void;
 }
-
-const getUserInitials = (name: string) => {
-  const names = name.split(' ');
-  if (names.length > 1) {
-    return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-};
-
-const generateColorFromId = (id: string) => {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const h = hash % 360;
-  const s = 70;
-  const l = 45;
-  return `hsl(${h}, ${s}%, ${l}%)`;
-};
 
 const getChecklistProgress = (card: CardType) => {
   if (!card.checklist || card.checklist.length === 0) {

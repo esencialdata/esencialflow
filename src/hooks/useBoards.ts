@@ -13,7 +13,7 @@ const formatBoardDates = (board: any): Board => {
     return { ...board, createdAt, updatedAt, priority } as Board;
 };
 
-export const useBoards = () => {
+export const useBoards = (currentUserId?: string | null) => {
   const [boards, setBoards] = useState<Board[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState<string | null>(null);
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
@@ -23,6 +23,16 @@ export const useBoards = () => {
 
   // This useEffect runs only once on mount to fetch all initial boards
   useEffect(() => {
+    if (!currentUserId) {
+      setBoards([]);
+      setCurrentBoardId(null);
+      setEditingBoard(null);
+      setIsCreatingBoard(false);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     const fetchBoardsAndSetInitial = async () => {
         setIsLoading(true);
         try {
@@ -42,7 +52,7 @@ export const useBoards = () => {
     };
     
     fetchBoardsAndSetInitial();
-  }, []); // Empty dependency array ensures this runs only ONCE.
+  }, [currentUserId]);
 
   const handleCreateBoard = async (boardData: Omit<Board, 'boardId' | 'createdAt' | 'updatedAt'>) => {
     try {

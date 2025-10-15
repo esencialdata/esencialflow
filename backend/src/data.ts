@@ -5,6 +5,8 @@ export interface Board {
   name: string;
   description?: string;
   ownerId: string;
+  ownerEmail?: string;
+  memberIds?: string[];
   visibility: "public" | "private";
   priority: 'low' | 'medium' | 'high';
   createdAt: Date;
@@ -64,6 +66,8 @@ export const boards: Board[] = [
     name: "Tablero de Prueba",
     description: "Un tablero para desarrollo y pruebas",
     ownerId: "user-1",
+    ownerEmail: "ana.garcia@example.com",
+    memberIds: ["user-1"],
     visibility: "public",
     priority: 'medium',
     createdAt: new Date(),

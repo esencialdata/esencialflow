@@ -30,6 +30,8 @@ export interface Board {
   name: string; // Nombre del tablero
   description?: string; // Descripción del tablero (opcional)
   ownerId: string; // ID del usuario creador/propietario
+  ownerEmail?: string;
+  memberIds?: string[]; // IDs de usuarios con acceso al tablero
   visibility: "public" | "private"; // Visibilidad del tablero
   priority: 'low' | 'medium' | 'high';
   createdAt: Date;

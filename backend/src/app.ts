@@ -10,6 +10,129 @@ type ServiceAccountShape = {
 
 type AuthedRequest = express.Request & { user?: admin.auth.DecodedIdToken };
 
+const getUserIdFromRequest = (req: AuthedRequest): string | null => {
+  const uid = req.user?.uid;
+  if (typeof uid === 'string' && uid.trim()) {
+    return uid.trim();
+  }
+  return null;
+};
+
+const extractIdsFromUnknown = (value: unknown): string[] => {
+  if (!value) return [];
+  const ids: string[] = [];
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === 'string' && item.trim()) {
+        ids.push(item.trim());
+        continue;
+      }
+      if (item && typeof item === 'object') {
+        const candidate = (item as { userId?: unknown; uid?: unknown; id?: unknown });
+        if (typeof candidate.userId === 'string' && candidate.userId.trim()) {
+          ids.push(candidate.userId.trim());
+        }
+        if (typeof candidate.uid === 'string' && candidate.uid.trim()) {
+          ids.push(candidate.uid.trim());
+        }
+        if (typeof candidate.id === 'string' && candidate.id.trim()) {
+          ids.push(candidate.id.trim());
+        }
+      }
+    }
+    return ids;
+  }
+
+  if (typeof value === 'object') {
+    for (const maybe of Object.values(value as Record<string, unknown>)) {
+      if (typeof maybe === 'string' && maybe.trim()) {
+        ids.push(maybe.trim());
+      } else if (maybe && typeof maybe === 'object') {
+        const nested = extractIdsFromUnknown(maybe);
+        ids.push(...nested);
+      }
+    }
+  }
+
+  return ids;
+};
+
+const collectBoardMemberIds = (board: Record<string, unknown>): string[] => {
+  const candidates = ['memberIds', 'members', 'collaboratorIds', 'sharedWithUserIds', 'participantIds', 'userIds', 'users'];
+  const unique = new Set<string>();
+
+  const ownerId = board?.ownerId;
+  if (typeof ownerId === 'string' && ownerId.trim()) {
+    unique.add(ownerId.trim());
+  }
+
+  for (const field of candidates) {
+    if (!Object.prototype.hasOwnProperty.call(board, field)) {
+      continue;
+    }
+    const value = (board as Record<string, unknown>)[field];
+    for (const id of extractIdsFromUnknown(value)) {
+      if (id) {
+        unique.add(id);
+      }
+    }
+  }
+
+  return Array.from(unique);
+};
+
+const userHasBoardAccess = (board: Record<string, unknown>, userId: string, userEmail?: string | null): boolean => {
+  if (userId) {
+    const members = collectBoardMemberIds(board);
+    if (members.includes(userId)) {
+      return true;
+    }
+  }
+
+  if (userEmail) {
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    if (normalizedEmail) {
+      const emailCandidates: unknown[] = [];
+      if (typeof board.ownerEmail === 'string') emailCandidates.push(board.ownerEmail);
+      if (typeof (board as any).createdByEmail === 'string') emailCandidates.push((board as any).createdByEmail);
+      if ((board as any).owner && typeof (board as any).owner === 'object') {
+        const ownerObj = (board as any).owner as { email?: unknown };
+        if (typeof ownerObj.email === 'string') {
+          emailCandidates.push(ownerObj.email);
+        }
+      }
+      if (Array.isArray((board as any).members)) {
+        for (const member of (board as any).members as any[]) {
+          if (member && typeof member === 'object') {
+            if (typeof member.email === 'string') {
+              emailCandidates.push(member.email);
+            }
+          }
+        }
+      }
+      if (emailCandidates.some(val => typeof val === 'string' && val.trim().toLowerCase() === normalizedEmail)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const sanitizeMemberIds = (incoming: unknown, ownerId: string): string[] => {
+  const ids = new Set<string>();
+  for (const id of extractIdsFromUnknown(incoming)) {
+    if (id) {
+      ids.add(id);
+    }
+  }
+  if (ownerId) {
+    ids.add(ownerId);
+  }
+  return Array.from(ids);
+};
+
 const resolveStorageBucket = (serviceAccount?: ServiceAccountShape): string | undefined => {
   const explicit = process.env.FIREBASE_STORAGE_BUCKET?.trim();
   if (explicit) {
@@ -489,11 +612,24 @@ app.delete('/api/habits/:habitId/check', async (req, res) => {
 
 // Boards API
 app.get('/api/boards', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const boardsRef = db.collection('boards');
     const snapshot = await boardsRef.get();
-    const boards = snapshot.docs.map(doc => ({ boardId: doc.id, ...doc.data() }));
-    console.log(`[API] /api/boards -> ${boards.length} registros`);
+    const boards = snapshot.docs
+      .map(doc => {
+        const data = doc.data() ?? {};
+        return { boardId: doc.id, ...data };
+      })
+      .filter(board => userHasBoardAccess(board, userId, userEmail));
+    console.log(`[API] /api/boards -> ${boards.length} registros visibles para ${userId}`);
     res.json(boards);
   } catch (error) {
     console.error("Error fetching boards:", error);
@@ -502,15 +638,28 @@ app.get('/api/boards', async (req, res) => {
 });
 
 app.get('/api/boards/:boardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const { boardId } = req.params;
     const boardRef = db.collection('boards').doc(boardId);
     const doc = await boardRef.get();
     if (!doc.exists) {
       res.status(404).json({ message: "Board not found" });
-    } else {
-      res.json({ boardId: doc.id, ...doc.data() });
+      return;
     }
+    const boardData = { boardId: doc.id, ...doc.data() };
+    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+      res.status(403).json({ message: 'Board not accessible' });
+      return;
+    }
+    res.json(boardData);
   } catch (error) {
     console.error("Error fetching board:", error);
     res.status(500).json({ message: "Error fetching board" });
@@ -518,16 +667,36 @@ app.get('/api/boards/:boardId', async (req, res) => {
 });
 
 app.post('/api/boards', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
+    const body = req.body ?? {};
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Nuevo tablero';
+    const description = typeof body.description === 'string' ? body.description : '';
+    const visibility = body.visibility === 'public' ? 'public' : 'private';
+    const memberIds = sanitizeMemberIds((body as Record<string, unknown>).memberIds, userId);
+    const priority = sanitizePriority((body as any)?.priority, 'medium');
+    const ownerEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email.trim().toLowerCase() : null;
+
     const newBoardData = {
-      ...req.body,
-      priority: sanitizePriority((req.body as any)?.priority, 'medium'),
+      name,
+      description,
+      visibility,
+      ownerId: userId,
+      memberIds,
+      priority,
+      ...(ownerEmail ? { ownerEmail } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     const docRef = await db.collection('boards').add(newBoardData);
-    const newBoard = { boardId: docRef.id, ...newBoardData };
-    res.status(201).json(newBoard);
+    const created = await docRef.get();
+    res.status(201).json({ boardId: docRef.id, ...created.data() });
   } catch (error) {
     console.error("Error creating board:", error);
     res.status(500).json({ message: "Error creating board" });
@@ -535,17 +704,53 @@ app.post('/api/boards', async (req, res) => {
 });
 
 app.put('/api/boards/:boardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const { boardId } = req.params;
-    const updatedBoardData = {
-      ...req.body,
-      ...(Object.prototype.hasOwnProperty.call(req.body, 'priority')
-        ? { priority: sanitizePriority(req.body.priority) }
-        : {}),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    await db.collection('boards').doc(boardId).update(updatedBoardData);
-    res.json({ boardId: boardId, ...updatedBoardData });
+    const boardRef = db.collection('boards').doc(boardId);
+    const snap = await boardRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ message: "Board not found" });
+      return;
+    }
+    const existing = snap.data() ?? {};
+    if ((existing as any).ownerId !== userId) {
+      res.status(403).json({ message: "Only the owner can update this board" });
+      return;
+    }
+
+    const body = req.body ?? {};
+    const updates: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(body, 'name') && typeof body.name === 'string') {
+      updates.name = body.name.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'description') && typeof body.description === 'string') {
+      updates.description = body.description;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'visibility') && body.visibility === 'public') {
+      updates.visibility = 'public';
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'visibility') && body.visibility !== 'public') {
+      updates.visibility = 'private';
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'priority')) {
+      updates.priority = sanitizePriority((body as any).priority);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'memberIds')) {
+      updates.memberIds = sanitizeMemberIds((body as Record<string, unknown>).memberIds, userId);
+    }
+
+    updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+    await boardRef.update(updates);
+    const updatedSnap = await boardRef.get();
+    res.json({ boardId, ...updatedSnap.data() });
   } catch (error) {
     console.error("Error updating board:", error);
     res.status(500).json({ message: "Error updating board" });
@@ -553,7 +758,26 @@ app.put('/api/boards/:boardId', async (req, res) => {
 });
 
 app.delete('/api/boards/:boardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   const { boardId } = req.params;
+  const boardRef = db.collection('boards').doc(boardId);
+  const snapshot = await boardRef.get();
+  if (!snapshot.exists) {
+    res.status(404).json({ message: 'Board not found' });
+    return;
+  }
+  const data = snapshot.data() ?? {};
+  if ((data as any).ownerId !== userId) {
+    res.status(403).json({ message: 'Only the owner can delete this board' });
+    return;
+  }
+
   const batch = db.batch();
 
   try {
@@ -578,7 +802,6 @@ app.delete('/api/boards/:boardId', async (req, res) => {
     }
 
     // 3. Add the board itself to the batch
-    const boardRef = db.collection('boards').doc(boardId);
     batch.delete(boardRef);
 
     // 4. Commit the atomic batch
@@ -598,14 +821,33 @@ app.delete('/api/boards/:boardId', async (req, res) => {
 
 // GET all cards for a specific board (efficiently)
 app.get('/api/boards/:boardId/cards', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const { boardId } = req.params;
-    
+    const boardSnap = await db.collection('boards').doc(boardId).get();
+    if (!boardSnap.exists) {
+      res.status(404).json({ message: 'Board not found' });
+      return;
+    }
+    const boardData = boardSnap.data() ?? {};
+    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+      res.status(403).json({ message: 'Board not accessible' });
+      return;
+    }
+
     // Find all lists for the given boardId
     const listsSnapshot = await db.collection('lists').where('boardId', '==', boardId).get();
-    
+
     if (listsSnapshot.empty) {
-      return res.json([]);
+      res.json([]);
+      return;
     }
 
     const listIds = listsSnapshot.docs.map(doc => doc.id);
@@ -623,12 +865,31 @@ app.get('/api/boards/:boardId/cards', async (req, res) => {
 
 // Lists API
 app.get('/api/boards/:boardId/lists', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const { boardId } = req.params;
+    const boardSnap = await db.collection('boards').doc(boardId).get();
+    if (!boardSnap.exists) {
+      res.status(404).json({ message: 'Board not found' });
+      return;
+    }
+    const boardData = boardSnap.data() ?? {};
+    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+      res.status(403).json({ message: 'Board not accessible' });
+      return;
+    }
+
     const listsRef = db.collection('lists').where('boardId', '==', boardId);
     const snapshot = await listsRef.orderBy('position').get();
     const lists = snapshot.docs.map(doc => ({ listId: doc.id, ...doc.data() }));
-    console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros`);
+    console.log(`[API] /api/boards/${boardId}/lists -> ${lists.length} registros visibles para ${userId}`);
     res.json(lists);
   } catch (error) {
     console.error("Error fetching lists:", error);
@@ -637,8 +898,27 @@ app.get('/api/boards/:boardId/lists', async (req, res) => {
 });
 
 app.post('/api/boards/:boardId/lists', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
   try {
     const { boardId } = req.params;
+    const boardSnap = await db.collection('boards').doc(boardId).get();
+    if (!boardSnap.exists) {
+      res.status(404).json({ message: 'Board not found' });
+      return;
+    }
+    const boardData = boardSnap.data() ?? {};
+    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+      res.status(403).json({ message: 'Board not accessible' });
+      return;
+    }
+
     const newListData = {
       ...req.body,
       boardId,
@@ -1289,6 +1569,14 @@ app.get('/api/boards/:boardId/export', async (req, res) => {
 
 // Import board from JSON (expects shape returned by export)
 app.post('/api/boards/import', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+  const ownerEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email.trim().toLowerCase() : null;
+
   try {
     const payload = req.body || {};
     const srcBoard = payload.board;
@@ -1298,12 +1586,23 @@ app.post('/api/boards/import', async (req, res) => {
       return res.status(400).json({ message: 'Invalid payload: board is required' });
     }
 
+    const incomingMembers =
+      (srcBoard.memberIds ??
+        srcBoard.members ??
+        srcBoard.sharedWithUserIds ??
+        srcBoard.participantIds ??
+        srcBoard.userIds ??
+        srcBoard.users) ?? [];
+
     // 1) Create new board
     const newBoardData = {
-      name: srcBoard.name + ' (imported)',
+      name: `${srcBoard.name} (imported)`,
       description: srcBoard.description || '',
-      ownerId: srcBoard.ownerId || 'user-1',
-      visibility: srcBoard.visibility || 'private',
+      ownerId: userId,
+      memberIds: sanitizeMemberIds(incomingMembers, userId),
+      visibility: srcBoard.visibility === 'public' ? 'public' : 'private',
+      priority: sanitizePriority((srcBoard as any)?.priority, 'medium'),
+      ...(ownerEmail ? { ownerEmail } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };

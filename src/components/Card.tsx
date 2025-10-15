@@ -8,6 +8,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { usePomodoro } from '../context/PomodoroContext';
 import { API_URL } from '../config/api';
 import { api } from '../config/http';
+import { generateColorFromId, getUserInitials } from '../utils/user';
 
 interface CardProps {
   card: CardType;
@@ -18,25 +19,6 @@ interface CardProps {
   onToggleComplete: (card: CardType) => void;
   onArchiveToggle: (card: CardType) => void;
 }
-
-const getUserInitials = (name: string) => {
-  const names = name.split(' ');
-  if (names.length > 1) {
-    return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-};
-
-const generateColorFromId = (id: string) => {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const h = hash % 360;
-  const s = 70; // Saturation
-  const l = 45; // Lightness
-  return `hsl(${h}, ${s}%, ${l}%)`;
-};
 
 const PRIORITY_LABELS: Record<CardType['priority'], string> = {
   low: 'Baja',

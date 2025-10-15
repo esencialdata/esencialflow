@@ -12,6 +12,8 @@ exports.boards = [
         name: "Tablero de Prueba",
         description: "Un tablero para desarrollo y pruebas",
         ownerId: "user-1",
+        ownerEmail: "ana.garcia@example.com",
+        memberIds: ["user-1"],
         visibility: "public",
         priority: 'medium',
         createdAt: new Date(),
