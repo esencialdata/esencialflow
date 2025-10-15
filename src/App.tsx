@@ -10,7 +10,7 @@ import EditBoardModal from './components/EditBoardModal';
 import EditCardModal from './components/EditCardModal';
 import { useBoards } from './hooks/useBoards';
 import { useCards } from './hooks/useCards';
-import ZapierIntegration from './components/ZapierIntegration';
+import N8nIntegration from './components/N8nIntegration';
 import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
 import { Card, User } from './types/data';
@@ -27,7 +27,7 @@ import { auth } from './config/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { generateColorFromId, getUserInitials } from './utils/user';
 
-type View = 'home' | 'kanban' | 'myday' | 'zapier' | 'calendar' | 'list';
+type View = 'home' | 'kanban' | 'myday' | 'n8n' | 'calendar' | 'list';
 
 function App() {
   const [authStateChecked, setAuthStateChecked] = useState(false);
@@ -322,7 +322,7 @@ function App() {
           <button onClick={() => setCurrentView('list')} disabled={currentView === 'list'}>Lista</button>
           <button onClick={() => setCurrentView('myday')} disabled={currentView === 'myday'}>Mi Día</button>
           <button onClick={() => setCurrentView('calendar')} disabled={currentView === 'calendar'}>Calendario</button>
-          <button onClick={() => setCurrentView('zapier')} disabled={currentView === 'zapier'}>Zapier</button>
+          <button onClick={() => setCurrentView('n8n')} disabled={currentView === 'n8n'}>n8n</button>
         </nav>
         <div className="board-selector">
           {boards.length > 0 && (
@@ -425,8 +425,8 @@ function App() {
               if (cardsError) return <p className="error-message">{cardsError}</p>;
               const allCards = Object.values(cards || {}).flat();
               return <ListView cards={allCards} onCardClick={handleEditCard} />;
-            case 'zapier':
-              return <ZapierIntegration />;
+            case 'n8n':
+              return <N8nIntegration />;
             default:
               return currentBoardId ? <KanbanBoard onStartFocus={handleStartFocus} onEditCard={handleEditCard} boardId={currentBoardId} users={users} /> : <p>Selecciona un tablero.</p>;
           }
