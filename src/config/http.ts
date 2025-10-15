@@ -2,9 +2,7 @@ import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from './api';
 import { auth } from './firebase';
 
-export const api = axios.create({
-  baseURL: API_URL,
-});
+export const api = axios.create();
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   try {
@@ -18,6 +16,19 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     console.error('No se pudo obtener el token de Firebase:', error);
   }
 
+  return config;
+});
+
+api.interceptors.request.use(config => {
+  const url = config.url ?? '';
+  const hasScheme = /^https?:\/\//i.test(url);
+  if (url && (hasScheme || url.startsWith(API_URL))) {
+    return config;
+  }
+
+  const base = API_URL.replace(/\/$/, '');
+  const path = url ? `/${url.replace(/^\/+/, '')}` : '';
+  config.url = `${base}${path}`;
   return config;
 });
 
