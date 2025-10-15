@@ -116,7 +116,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
                   {new Date(card.dueDate).toLocaleDateString()}
                 </div>
               )}
-              {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name)}</div>}
+              {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name, assignedUser.email)}</div>}
             </div>
             <div className="card-actions" style={{ display:'flex', gap:6, alignItems:'center' }}>
               <button className="focus-button" onClick={(e) => { e.stopPropagation(); onStartFocus(card); }}>Focus</button>

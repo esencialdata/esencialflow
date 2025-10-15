@@ -49,7 +49,7 @@ const CardContent: React.FC<CardContentProps> = ({ card, users, onClick, onStart
               {new Date(card.dueDate).toLocaleDateString()}
             </div>
           )}
-          {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name)}</div>}
+          {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name, assignedUser.email)}</div>}
         </div>
         <button className="focus-button" onClick={onStartFocus}>Focus</button>
       </div>

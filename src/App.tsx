@@ -240,8 +240,7 @@ function App() {
 
   const isAuthenticated = useMemo(() => authStateChecked && !!firebaseUser, [authStateChecked, firebaseUser]);
   const userAvatarInitials = useMemo(() => {
-    const source = firebaseUser?.displayName || firebaseUser?.email || '';
-    return getUserInitials(source);
+    return getUserInitials(firebaseUser?.displayName, firebaseUser?.email);
   }, [firebaseUser?.displayName, firebaseUser?.email]);
 
   const userAvatarColor = useMemo(() => {
