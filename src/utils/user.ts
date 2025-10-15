@@ -13,9 +13,16 @@ export const getUserInitials = (fullNameOrEmail: string): string => {
 
   const single = parts[0];
   if (single.includes('@')) {
-    const [beforeAt] = single.split('@');
-    if (beforeAt.length >= 2) {
-      return `${beforeAt[0]}${beforeAt[beforeAt.length - 1]}`.toUpperCase();
+    const [beforeAtRaw] = single.split('@');
+    const beforeAt = beforeAtRaw.trim();
+    if (beforeAt) {
+      const tokens = beforeAt.split(/[.\-_]+/).filter(Boolean);
+      if (tokens.length >= 2) {
+        return `${tokens[0][0]}${tokens[tokens.length - 1][0]}`.toUpperCase();
+      }
+      if (beforeAt.length >= 2) {
+        return `${beforeAt[0]}${beforeAt[beforeAt.length - 1]}`.toUpperCase();
+      }
     }
   }
 
