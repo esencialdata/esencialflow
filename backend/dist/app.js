@@ -41,6 +41,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -50,6 +61,44 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const axios_1 = __importDefault(require("axios"));
 const admin = __importStar(require("firebase-admin"));
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const DEFAULT_USER_ROLE = 'member';
+const CLIENT_USER_ROLE = 'client';
+const normalizeUserRole = (value) => {
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'admin' || normalized === 'administrator')
+            return 'admin';
+        if (normalized === 'manager' || normalized === 'gestor' || normalized === 'coordinator')
+            return 'manager';
+        if (normalized === 'client' || normalized === 'cliente' || normalized === 'customer')
+            return 'client';
+        if (normalized === 'member' || normalized === 'usuario' || normalized === 'user' || normalized === 'miembro') {
+            return 'member';
+        }
+    }
+    return DEFAULT_USER_ROLE;
+};
+const normalizeAllowedIds = (value) => {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+    const list = value
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+    return list.length ? list : undefined;
+};
+const getAuthedUserFromRequest = (req) => { var _a; return (_a = req.authedUser) !== null && _a !== void 0 ? _a : null; };
+const getAllowedBoardIdsFromRequest = (req) => { var _a; return (_a = getAuthedUserFromRequest(req)) === null || _a === void 0 ? void 0 : _a.allowedBoardIds; };
+const isClientUser = (req) => { var _a; return ((_a = getAuthedUserFromRequest(req)) === null || _a === void 0 ? void 0 : _a.role) === CLIENT_USER_ROLE; };
+const ensureNonClientUser = (req, res) => {
+    if (isClientUser(req)) {
+        res.status(403).json({ message: 'Operation not permitted for client users' });
+        return false;
+    }
+    return true;
+};
 const getUserIdFromRequest = (req) => {
     var _a;
     const uid = (_a = req.user) === null || _a === void 0 ? void 0 : _a.uid;
@@ -116,7 +165,17 @@ const collectBoardMemberIds = (board) => {
     }
     return Array.from(unique);
 };
-const userHasBoardAccess = (board, userId, userEmail) => {
+const userHasBoardAccess = (board, userId, userEmail, allowedBoardIds) => {
+    if (allowedBoardIds && allowedBoardIds.length) {
+        const candidateBoardId = typeof board.boardId === 'string'
+            ? board.boardId.trim()
+            : typeof board.id === 'string'
+                ? String(board.id).trim()
+                : '';
+        if (!candidateBoardId || !allowedBoardIds.includes(candidateBoardId)) {
+            return false;
+        }
+    }
     if (userId) {
         const members = collectBoardMemberIds(board);
         if (members.includes(userId)) {
@@ -217,10 +276,32 @@ const initializeFirebaseAdmin = () => {
             return;
         }
         try {
-            const serviceAccount = require('./serviceAccountKey.json');
+            const candidatePaths = [
+                path_1.default.join(__dirname, 'serviceAccountKey.json'),
+                path_1.default.join(__dirname, '../src/serviceAccountKey.json'),
+                path_1.default.join(process.cwd(), 'serviceAccountKey.json')
+            ];
+            let serviceAccount = null;
+            let resolvedPath = '';
+            for (const candidate of candidatePaths) {
+                try {
+                    if (fs_1.default.existsSync(candidate)) {
+                        const raw = fs_1.default.readFileSync(candidate, 'utf8');
+                        serviceAccount = JSON.parse(raw);
+                        resolvedPath = candidate;
+                        break;
+                    }
+                }
+                catch (_a) {
+                    // continue checking other paths
+                }
+            }
+            if (!serviceAccount) {
+                throw new Error('serviceAccountKey.json not found');
+            }
             const storageBucket = resolveStorageBucket(serviceAccount);
             admin.initializeApp(Object.assign({ credential: admin.credential.cert(serviceAccount) }, (storageBucket ? { storageBucket } : {})));
-            console.log('Firebase Admin SDK initialized using local serviceAccountKey.json');
+            console.log(`Firebase Admin SDK initialized using local serviceAccountKey.json (${resolvedPath})`);
             if (!storageBucket) {
                 console.warn('No storage bucket configured. Attachment endpoints will be unavailable.');
             }
@@ -289,6 +370,7 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 const requireAuth = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const authHeader = req.headers.authorization;
     if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer '))) {
         res.status(401).json({ message: 'Missing or invalid auth token' });
@@ -301,7 +383,24 @@ const requireAuth = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
     }
     try {
         const decoded = yield admin.auth().verifyIdToken(idToken);
-        req.user = decoded;
+        const authedReq = req;
+        authedReq.user = decoded;
+        try {
+            const userDoc = yield db.collection('users').doc(decoded.uid).get();
+            if (userDoc.exists) {
+                const rawData = (_a = userDoc.data()) !== null && _a !== void 0 ? _a : {};
+                const role = normalizeUserRole(rawData.role);
+                const allowedBoardIds = normalizeAllowedIds(rawData.allowedBoardIds);
+                authedReq.authedUser = Object.assign(Object.assign(Object.assign({}, rawData), { userId: decoded.uid, role }), (allowedBoardIds ? { allowedBoardIds } : {}));
+            }
+            else {
+                authedReq.authedUser = { userId: decoded.uid, role: DEFAULT_USER_ROLE };
+            }
+        }
+        catch (profileError) {
+            console.error('Could not load user profile from Firestore:', profileError);
+            req.authedUser = { userId: decoded.uid, role: DEFAULT_USER_ROLE };
+        }
         next();
     }
     catch (error) {
@@ -392,14 +491,41 @@ app.get('/api/users', (req, res) => __awaiter(void 0, void 0, void 0, function* 
         res.status(500).json({ message: "Error fetching users" });
     }
 }));
+app.get('/api/me', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    const profile = getAuthedUserFromRequest(authedReq);
+    if (!profile) {
+        res.status(404).json({ message: 'User profile not found' });
+        return;
+    }
+    const { userId, role, allowedBoardIds } = profile, rest = __rest(profile, ["userId", "role", "allowedBoardIds"]);
+    const payload = {
+        userId,
+        role,
+    };
+    if (allowedBoardIds && allowedBoardIds.length) {
+        payload.allowedBoardIds = allowedBoardIds;
+    }
+    for (const [key, value] of Object.entries(rest)) {
+        if (value === undefined || key === 'userId' || key === 'role' || key === 'allowedBoardIds') {
+            continue;
+        }
+        payload[key] = value;
+    }
+    res.json(payload);
+}));
 // Habits API
 app.get('/api/habits', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    const requestedUserId = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+    const ownerId = requestedUserId || getUserIdFromRequest(authedReq);
+    if (!ownerId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
     try {
-        const { userId, includeArchived } = req.query;
-        let habitsQuery = db.collection('habits');
-        if (userId) {
-            habitsQuery = habitsQuery.where('userId', '==', userId);
-        }
+        const { includeArchived } = req.query;
+        let habitsQuery = db.collection('habits').where('userId', '==', ownerId);
         const snapshot = yield habitsQuery.get();
         const include = includeArchived === 'true';
         const habits = snapshot.docs
@@ -413,16 +539,21 @@ app.get('/api/habits', (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 }));
 app.post('/api/habits', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { name, description, userId } = req.body || {};
         const trimmedName = typeof name === 'string' ? name.trim() : '';
-        if (!trimmedName || typeof userId !== 'string' || !userId.trim()) {
+        const ownerId = typeof userId === 'string' && userId.trim() ? userId.trim() : getUserIdFromRequest(authedReq);
+        if (!trimmedName || !ownerId) {
             return res.status(400).json({ message: 'name and userId are required' });
         }
         const habitPayload = {
             name: trimmedName,
             description: typeof description === 'string' ? description.trim() : '',
-            userId,
+            userId: ownerId,
             archived: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -437,6 +568,10 @@ app.post('/api/habits', (req, res) => __awaiter(void 0, void 0, void 0, function
     }
 }));
 app.put('/api/habits/:habitId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { habitId } = req.params;
         const { name, description, archived } = req.body || {};
@@ -448,6 +583,12 @@ app.put('/api/habits/:habitId', (req, res) => __awaiter(void 0, void 0, void 0, 
         const snap = yield habitRef.get();
         if (!snap.exists) {
             return res.status(204).send();
+        }
+        const habitData = snap.data();
+        const ownerId = habitData === null || habitData === void 0 ? void 0 : habitData.userId;
+        const authedUserId = getUserIdFromRequest(authedReq);
+        if (!authedUserId || (ownerId && authedUserId !== ownerId)) {
+            return res.status(403).json({ message: 'Habit does not belong to user' });
         }
         const updatePayload = {
             name: trimmedName,
@@ -467,12 +608,22 @@ app.put('/api/habits/:habitId', (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.delete('/api/habits/:habitId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { habitId } = req.params;
         const habitRef = db.collection('habits').doc(habitId);
         const snap = yield habitRef.get();
         if (!snap.exists) {
             return res.status(404).json({ message: 'Habit not found' });
+        }
+        const habitData = snap.data();
+        const ownerId = habitData === null || habitData === void 0 ? void 0 : habitData.userId;
+        const authedUserId = getUserIdFromRequest(authedReq);
+        if (!authedUserId || (ownerId && authedUserId !== ownerId)) {
+            return res.status(403).json({ message: 'Habit does not belong to user' });
         }
         const completionsSnap = yield db
             .collection('habitCompletions')
@@ -490,16 +641,18 @@ app.delete('/api/habits/:habitId', (req, res) => __awaiter(void 0, void 0, void 
     }
 }));
 app.get('/api/habits/daily', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
     try {
         const { userId, date } = req.query;
+        const ownerId = typeof userId === 'string' && userId.trim() ? userId.trim() : getUserIdFromRequest(authedReq);
+        if (!ownerId) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
         const dateKey = sanitizeDateParam(date || null);
         if (!dateKey) {
             return res.status(400).json({ message: 'Invalid date parameter' });
         }
-        let habitsQuery = db.collection('habits');
-        if (userId) {
-            habitsQuery = habitsQuery.where('userId', '==', userId);
-        }
+        let habitsQuery = db.collection('habits').where('userId', '==', ownerId);
         const habitsSnapshot = yield habitsQuery.get();
         const activeHabits = habitsSnapshot.docs
             .map(doc => (Object.assign({ id: doc.id }, doc.data())))
@@ -507,10 +660,9 @@ app.get('/api/habits/daily', (req, res) => __awaiter(void 0, void 0, void 0, fun
         if (!activeHabits.length) {
             return res.json([]);
         }
-        let completionQuery = db.collection('habitCompletions').where('date', '==', dateKey);
-        if (userId) {
-            completionQuery = completionQuery.where('userId', '==', userId);
-        }
+        let completionQuery = db.collection('habitCompletions')
+            .where('date', '==', dateKey)
+            .where('userId', '==', ownerId);
         const completionsSnapshot = yield completionQuery.get();
         const completions = new Map();
         completionsSnapshot.docs.forEach(doc => {
@@ -532,9 +684,14 @@ app.get('/api/habits/daily', (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 }));
 app.post('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { habitId } = req.params;
         const { date, userId } = req.body || {};
+        const actingUserId = getUserIdFromRequest(authedReq);
         const dateKey = sanitizeDateParam(date || null);
         if (!dateKey) {
             return res.status(400).json({ message: 'Invalid date parameter' });
@@ -545,14 +702,16 @@ app.post('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0, v
             return res.status(404).json({ message: 'Habit not found' });
         }
         const habitData = habitSnap.data();
-        if (userId && habitData.userId && userId !== habitData.userId) {
+        const ownerId = habitData === null || habitData === void 0 ? void 0 : habitData.userId;
+        const finalUserId = typeof userId === 'string' && userId.trim() ? userId.trim() : actingUserId;
+        if (!finalUserId || (ownerId && finalUserId !== ownerId)) {
             return res.status(403).json({ message: 'Habit does not belong to user' });
         }
         const completionId = `${habitId}_${dateKey}`;
         const completionRef = db.collection('habitCompletions').doc(completionId);
         const completionPayload = {
             habitId,
-            userId: habitData.userId,
+            userId: ownerId,
             date: dateKey,
             completedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
@@ -566,9 +725,14 @@ app.post('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0, v
     }
 }));
 app.delete('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { habitId } = req.params;
         const { date, userId } = req.query;
+        const actingUserId = getUserIdFromRequest(authedReq);
         const dateKey = sanitizeDateParam(date || null);
         if (!dateKey) {
             return res.status(400).json({ message: 'Invalid date parameter' });
@@ -579,7 +743,9 @@ app.delete('/api/habits/:habitId/check', (req, res) => __awaiter(void 0, void 0,
             return res.status(404).json({ message: 'Habit not found' });
         }
         const habitData = habitSnap.data();
-        if (userId && habitData.userId && userId !== habitData.userId) {
+        const ownerId = habitData === null || habitData === void 0 ? void 0 : habitData.userId;
+        const finalUserId = typeof userId === 'string' && userId.trim() ? userId.trim() : actingUserId;
+        if (!finalUserId || (ownerId && finalUserId !== ownerId)) {
             return res.status(403).json({ message: 'Habit does not belong to user' });
         }
         const completionId = `${habitId}_${dateKey}`;
@@ -602,6 +768,7 @@ app.get('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function*
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
     const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -615,7 +782,7 @@ app.get('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function*
             const data = (_a = doc.data()) !== null && _a !== void 0 ? _a : {};
             return Object.assign({ boardId: doc.id }, data);
         })
-            .filter(board => userHasBoardAccess(board, userId, userEmail));
+            .filter(board => userHasBoardAccess(board, userId, userEmail, allowedBoardIds));
         console.log(`[API] /api/boards -> ${boards.length} registros visibles para ${userId}`);
         res.json(boards);
     }
@@ -629,6 +796,7 @@ app.get('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, 
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
     const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -642,7 +810,7 @@ app.get('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, 
             return;
         }
         const boardData = Object.assign({ boardId: doc.id }, doc.data());
-        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+        if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
             res.status(403).json({ message: 'Board not accessible' });
             return;
         }
@@ -657,6 +825,9 @@ app.post('/api/boards', (req, res) => __awaiter(void 0, void 0, void 0, function
     var _a, _b;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -686,6 +857,9 @@ app.put('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 0, 
     var _a, _b;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -737,6 +911,9 @@ app.delete('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 
     var _a;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -791,10 +968,11 @@ app.delete('/api/boards/:boardId', (req, res) => __awaiter(void 0, void 0, void 
 }));
 // GET all cards for a specific board (efficiently)
 app.get('/api/boards/:boardId/cards', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
     const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -806,8 +984,8 @@ app.get('/api/boards/:boardId/cards', (req, res) => __awaiter(void 0, void 0, vo
             res.status(404).json({ message: 'Board not found' });
             return;
         }
-        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
-        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+        const boardData = Object.assign({ boardId }, boardSnap.data());
+        if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
             res.status(403).json({ message: 'Board not accessible' });
             return;
         }
@@ -830,10 +1008,11 @@ app.get('/api/boards/:boardId/cards', (req, res) => __awaiter(void 0, void 0, vo
 }));
 // Lists API
 app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
     const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -845,8 +1024,8 @@ app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, vo
             res.status(404).json({ message: 'Board not found' });
             return;
         }
-        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
-        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+        const boardData = Object.assign({ boardId }, boardSnap.data());
+        if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
             res.status(403).json({ message: 'Board not accessible' });
             return;
         }
@@ -862,12 +1041,16 @@ app.get('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, vo
     }
 }));
 app.post('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
     const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+    if (!ensureNonClientUser(authedReq, res)) {
         return;
     }
     try {
@@ -877,8 +1060,8 @@ app.post('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, v
             res.status(404).json({ message: 'Board not found' });
             return;
         }
-        const boardData = (_b = boardSnap.data()) !== null && _b !== void 0 ? _b : {};
-        if (!userHasBoardAccess(boardData, userId, userEmail)) {
+        const boardData = Object.assign({ boardId }, boardSnap.data());
+        if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
             res.status(403).json({ message: 'Board not accessible' });
             return;
         }
@@ -893,6 +1076,10 @@ app.post('/api/boards/:boardId/lists', (req, res) => __awaiter(void 0, void 0, v
     }
 }));
 app.put('/api/lists/:listId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { listId } = req.params;
         const updatedListData = Object.assign(Object.assign({}, req.body), { updatedAt: admin.firestore.FieldValue.serverTimestamp() });
@@ -905,6 +1092,10 @@ app.put('/api/lists/:listId', (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 }));
 app.delete('/api/lists/:listId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { listId } = req.params;
         const batch = db.batch();
@@ -957,6 +1148,7 @@ app.get('/api/cards/today', (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 // Flexible search by due date range, optionally filter by userId
 app.get('/api/cards/search', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
     try {
         const { start, end, userId } = req.query;
         if (!start || !end) {
@@ -967,14 +1159,17 @@ app.get('/api/cards/search', (req, res) => __awaiter(void 0, void 0, void 0, fun
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
             return res.status(400).json({ message: 'invalid start or end date' });
         }
+        const startTimestamp = admin.firestore.Timestamp.fromDate(startDate);
+        const endTimestamp = admin.firestore.Timestamp.fromDate(endDate);
         const snapshot = yield db
             .collection('cards')
-            .where('dueDate', '>=', startDate)
-            .where('dueDate', '<', endDate)
+            .where('dueDate', '>=', startTimestamp)
+            .where('dueDate', '<', endTimestamp)
             .get();
         let cards = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
-        if (userId) {
-            cards = cards.filter((c) => c.assignedToUserId === userId);
+        const filterUserId = (typeof userId === 'string' && userId.trim()) || getUserIdFromRequest(authedReq);
+        if (filterUserId) {
+            cards = cards.filter((c) => c.assignedToUserId === filterUserId);
         }
         res.json(cards);
     }
@@ -997,6 +1192,10 @@ app.get('/api/lists/:listId/cards', (req, res) => __awaiter(void 0, void 0, void
     }
 }));
 app.post('/api/lists/:listId/cards', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { listId } = req.params;
         const incoming = Object.assign({}, req.body);
@@ -1038,6 +1237,10 @@ app.post('/api/lists/:listId/cards', (req, res) => __awaiter(void 0, void 0, voi
     }
 }));
 app.put('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId } = req.params;
         const incoming = Object.assign({}, req.body);
@@ -1059,6 +1262,10 @@ app.put('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 }));
 app.patch('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId } = req.params;
         const incoming = Object.assign({}, req.body);
@@ -1104,6 +1311,10 @@ app.patch('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.delete('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId } = req.params;
         yield db.collection('cards').doc(cardId).delete();
@@ -1116,6 +1327,10 @@ app.delete('/api/cards/:cardId', (req, res) => __awaiter(void 0, void 0, void 0,
 }));
 // Attachments API
 app.post('/api/cards/:cardId/request-upload-url', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     const { cardId } = req.params;
     const { fileName, fileType } = req.body;
     if (!fileName || !fileType) {
@@ -1142,6 +1357,10 @@ app.post('/api/cards/:cardId/request-upload-url', (req, res) => __awaiter(void 0
     }
 }));
 app.post('/api/cards/:cardId/attachments', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     const { cardId } = req.params;
     const attachmentData = req.body;
     try {
@@ -1184,6 +1403,10 @@ app.get('/api/cards/:cardId/attachments/signed-read', (req, res) => __awaiter(vo
 }));
 // Remove an attachment from a card (and optionally delete the object in GCS)
 app.delete('/api/cards/:cardId/attachments/:attachmentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     const { cardId, attachmentId } = req.params;
     const { deleteObject } = req.query;
     try {
@@ -1223,6 +1446,10 @@ app.delete('/api/cards/:cardId/attachments/:attachmentId', (req, res) => __await
 }));
 // Batch reorder cards (position and optional listId) for performance
 app.post('/api/cards/reorder-batch', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const updates = req.body && Array.isArray(req.body.updates) ? req.body.updates : null;
         if (!updates || updates.length === 0) {
@@ -1251,6 +1478,10 @@ app.post('/api/cards/reorder-batch', (req, res) => __awaiter(void 0, void 0, voi
 }));
 // Timer Sessions API
 app.post('/api/timer-sessions', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const newSessionData = Object.assign(Object.assign({}, req.body), { startTime: admin.firestore.FieldValue.serverTimestamp() });
         const docRef = yield db.collection('timerSessions').add(newSessionData);
@@ -1263,6 +1494,10 @@ app.post('/api/timer-sessions', (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.patch('/api/timer-sessions/:sessionId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { sessionId } = req.params;
         const updatedSessionData = Object.assign(Object.assign({}, req.body), { endTime: admin.firestore.FieldValue.serverTimestamp() });
@@ -1276,6 +1511,10 @@ app.patch('/api/timer-sessions/:sessionId', (req, res) => __awaiter(void 0, void
 }));
 // Webhooks API
 app.post('/api/webhooks', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const newWebhookData = Object.assign(Object.assign({}, req.body), { createdAt: admin.firestore.FieldValue.serverTimestamp() });
         const docRef = yield db.collection('webhooks').add(newWebhookData);
@@ -1311,6 +1550,10 @@ app.get('/api/cards/:cardId/comments', (req, res) => __awaiter(void 0, void 0, v
     }
 }));
 app.post('/api/cards/:cardId/comments', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId } = req.params;
         const { authorUserId, text, mentions } = req.body || {};
@@ -1357,6 +1600,10 @@ app.post('/api/cards/:cardId/comments', (req, res) => __awaiter(void 0, void 0, 
     }
 }));
 app.put('/api/cards/:cardId/comments/:commentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId, commentId } = req.params;
         const { text, mentions } = req.body || {};
@@ -1404,6 +1651,10 @@ app.put('/api/cards/:cardId/comments/:commentId', (req, res) => __awaiter(void 0
     }
 }));
 app.delete('/api/cards/:cardId/comments/:commentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authedReq = req;
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     try {
         const { cardId, commentId } = req.params;
         const ref = db.collection('comments').doc(commentId);
@@ -1437,12 +1688,30 @@ app.get('/api/webhooks', (req, res) => __awaiter(void 0, void 0, void 0, functio
 }));
 // Export board (board + lists + cards + comments)
 app.get('/api/boards/:boardId/export', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authedReq = req;
+    const userId = getUserIdFromRequest(authedReq);
+    const userEmail = typeof ((_a = authedReq.user) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? authedReq.user.email : null;
+    const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+    if (isClientUser(authedReq)) {
+        res.status(403).json({ message: 'Operation not permitted for client users' });
+        return;
+    }
     try {
         const { boardId } = req.params;
         const boardRef = db.collection('boards').doc(boardId);
         const boardSnap = yield boardRef.get();
         if (!boardSnap.exists)
             return res.status(404).json({ message: 'Board not found' });
+        const board = Object.assign({ boardId: boardSnap.id }, boardSnap.data());
+        if (!userHasBoardAccess(board, userId, userEmail, allowedBoardIds)) {
+            res.status(403).json({ message: 'Board not accessible' });
+            return;
+        }
         const listsSnap = yield db.collection('lists').where('boardId', '==', boardId).get();
         const lists = listsSnap.docs.map(d => (Object.assign({ listId: d.id }, d.data())));
         const listIds = lists.map(l => l.listId);
@@ -1466,7 +1735,6 @@ app.get('/api/boards/:boardId/export', (req, res) => __awaiter(void 0, void 0, v
                 comments = snap.docs.map(d => (Object.assign({ id: d.id }, d.data())));
             // Note: for >10 cardIds habría que paginar; MVP incluye comentarios del primer batch.
         }
-        const board = Object.assign({ boardId: boardSnap.id }, boardSnap.data());
         res.json({ board, lists, cards, comments, exportedAt: new Date().toISOString() });
     }
     catch (error) {
@@ -1479,6 +1747,9 @@ app.post('/api/boards/import', (req, res) => __awaiter(void 0, void 0, void 0, f
     var _a, _b, _c, _d, _e, _f, _g;
     const authedReq = req;
     const userId = getUserIdFromRequest(authedReq);
+    if (!ensureNonClientUser(authedReq, res)) {
+        return;
+    }
     if (!userId) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
