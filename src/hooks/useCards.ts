@@ -136,6 +136,7 @@ export const useCards = (boardId: string | null) => {
         updatedCards[listId].push(newCard);
         return updatedCards;
       });
+      try { window.dispatchEvent(new CustomEvent('card:updated', { detail: newCard })); } catch {}
       showToast('Tarjeta creada', 'success');
     } catch (err) {
       setError('Failed to create card');
@@ -159,6 +160,7 @@ export const useCards = (boardId: string | null) => {
         next[lid] = [...(next[lid] || []), updated];
         return next;
       });
+      try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updated })); } catch {}
     } catch (err) {
       setError('Failed to update card');
       console.error(err);

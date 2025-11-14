@@ -7,6 +7,8 @@ export interface User {
   name: string;
   email: string;
   avatarUrl?: string; // URL de la imagen de perfil (opcional)
+  role?: 'admin' | 'member' | 'manager' | 'client';
+  allowedBoardIds?: string[];
 }
 
 export interface Habit {

@@ -15,13 +15,15 @@ interface EditCardModalProps {
   card: Card | null;
   onSubmit: (updatedCard: Card) => void;
   users: User[];
+  readOnly?: boolean;
 }
 
-const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, onSubmit, users }) => {
+const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, onSubmit, users, readOnly = false }) => {
   const [formData, setFormData] = useState<Partial<Card>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { showToast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const isReadOnly = Boolean(readOnly);
 
   const toInputDateLocal = (value: Date | string): string => {
     const d = new Date(value);
@@ -52,6 +54,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    if (isReadOnly) return;
     const { name, value } = e.target;
     if (name === 'priority') {
       setFormData(prev => ({ ...prev, priority: value as Card['priority'] }));
@@ -61,11 +64,16 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   };
 
   const handleAttachmentsChange = (attachments: Attachment[]) => {
+    if (isReadOnly) return;
     setFormData(prev => ({ ...prev, attachments }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) {
+      onClose();
+      return;
+    }
     if (isSaving) return;
     setIsSaving(true);
     const updatedCardData = { ...card, ...formData } as Card;
@@ -83,6 +91,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
   };
 
   const deleteFromModal = async () => {
+    if (isReadOnly) return;
     if (!card) return;
     try {
       await api.delete(`${API_URL}/cards/${card.id}`);
@@ -109,6 +118,8 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               value={formData.title || ''}
               onChange={handleChange}
               required
+              readOnly={isReadOnly}
+              disabled={isSaving && !isReadOnly}
             />
           </label>
           <label>
@@ -117,6 +128,8 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               name="description"
               value={formData.description || ''}
               onChange={handleChange}
+              readOnly={isReadOnly}
+              disabled={isSaving && !isReadOnly}
             />
           </label>
           <label>
@@ -126,6 +139,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               name="dueDate"
               value={formData.dueDate?.toString() || ''}
               onChange={handleChange}
+              disabled={isReadOnly || isSaving}
             />
           </label>
           <label>
@@ -134,6 +148,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               name="priority"
               value={formData.priority || 'medium'}
               onChange={handleChange}
+              disabled={isReadOnly || isSaving}
             >
               <option value="low">Baja</option>
               <option value="medium">Media</option>
@@ -147,11 +162,13 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               name="estimatedTime"
               value={formData.estimatedTime || ''}
               onChange={handleChange}
+              readOnly={isReadOnly}
+              disabled={isSaving && !isReadOnly}
             />
           </label>
           <label>
             Assign to:
-            <select name="assignedToUserId" value={formData.assignedToUserId || ''} onChange={handleChange}>
+            <select name="assignedToUserId" value={formData.assignedToUserId || ''} onChange={handleChange} disabled={isReadOnly || isSaving}>
               <option value="">Unassigned</option>
               {users.map(user => (
                 <option key={user.userId} value={user.userId}>{user.name}</option>
@@ -159,31 +176,57 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
             </select>
           </label>
           <div className="modal-actions">
-            <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? (<><Spinner /><span style={{marginLeft:6}}>Guardando…</span></>) : 'Save'}</button>
-            <button type="button" onClick={onClose} className="cancel-btn" disabled={isSaving}>Cancel</button>
-            <button type="button" onClick={() => setConfirmDelete(true)} className="cancel-btn" disabled={isSaving} style={{marginLeft:'auto'}}>Delete</button>
+            {isReadOnly ? (
+              <button type="button" onClick={onClose} className="cancel-btn">Cerrar</button>
+            ) : (
+              <>
+                <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? (<><Spinner /><span style={{marginLeft:6}}>Guardando…</span></>) : 'Save'}</button>
+                <button type="button" onClick={onClose} className="cancel-btn" disabled={isSaving}>Cancel</button>
+                <button type="button" onClick={() => setConfirmDelete(true)} className="cancel-btn" disabled={isSaving} style={{marginLeft:'auto'}}>Delete</button>
+              </>
+            )}
           </div>
         </form>
 
-        {/* Comments with @mentions */}
-        <CardComments cardId={card.id} users={users} />
+        {!isReadOnly && (
+          <>
+            {/* Comments with @mentions */}
+            <CardComments cardId={card.id} users={users} />
 
-        {/* Attachments */}
-        <CardAttachments
-          cardId={card.id}
-          attachments={Array.isArray(formData.attachments) ? (formData.attachments as any) : []}
-          onAttachmentsChange={handleAttachmentsChange}
-        />
+            {/* Attachments */}
+            <CardAttachments
+              cardId={card.id}
+              attachments={Array.isArray(formData.attachments) ? (formData.attachments as any) : []}
+              onAttachmentsChange={handleAttachmentsChange}
+            />
+          </>
+        )}
+        {isReadOnly && Array.isArray(formData.attachments) && (formData.attachments as Attachment[]).length > 0 && (
+          <div className="attachment-list-readonly">
+            <h3>Adjuntos</h3>
+            <ul>
+              {(formData.attachments as Attachment[]).map(att => (
+                <li key={att.attachmentId}>
+                  <a href={att.url} target="_blank" rel="noreferrer">
+                    {att.fileName}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Eliminar tarjeta"
-        message="Esta acción no se puede deshacer. ¿Deseas eliminar la tarjeta?"
-        confirmLabel="Eliminar"
-        cancelLabel="Cancelar"
-        onCancel={() => setConfirmDelete(false)}
-        onConfirm={deleteFromModal}
-      />
+      {!isReadOnly && (
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Eliminar tarjeta"
+          message="Esta acción no se puede deshacer. ¿Deseas eliminar la tarjeta?"
+          confirmLabel="Eliminar"
+          cancelLabel="Cancelar"
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={deleteFromModal}
+        />
+      )}
     </div>
   );
 };

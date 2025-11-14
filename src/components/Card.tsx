@@ -18,6 +18,7 @@ interface CardProps {
   onStartFocus: (card: CardType) => void;
   onToggleComplete: (card: CardType) => void;
   onArchiveToggle: (card: CardType) => void;
+  readOnly?: boolean;
 }
 
 const PRIORITY_LABELS: Record<CardType['priority'], string> = {
@@ -26,7 +27,7 @@ const PRIORITY_LABELS: Record<CardType['priority'], string> = {
   high: 'Alta',
 };
 
-const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocus, onToggleComplete, onArchiveToggle }) => {
+const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocus, onToggleComplete, onArchiveToggle, readOnly = false }) => {
   const assignedUser = users.find(u => u.userId === card.assignedToUserId);
   const { showToast } = useToast();
   const { activeCard } = usePomodoro();
@@ -34,6 +35,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
   const [titleValue, setTitleValue] = useState(card.title);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const isReadOnly = Boolean(readOnly);
   const toLocalDateOnly = (d: Date | string) => { const dt = new Date(d); return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0,0,0,0); };
   const today = toLocalDateOnly(new Date());
   const isOverdue = !!card.dueDate && toLocalDateOnly(card.dueDate) < today;
@@ -50,6 +52,11 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
   };
 
   const saveTitle = async () => {
+    if (isReadOnly) {
+      setIsEditingTitle(false);
+      setTitleValue(card.title);
+      return;
+    }
     const trimmed = titleValue.trim();
     if (!trimmed || trimmed === card.title) { setIsEditingTitle(false); setTitleValue(card.title); return; }
     try {
@@ -66,6 +73,10 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
   };
 
   const deleteCard = async () => {
+    if (isReadOnly) {
+      setConfirmDelete(false);
+      return;
+    }
     try {
       setBusy(true);
       await api.delete(`${API_URL}/cards/${card.id}`);
@@ -81,7 +92,7 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
 
   return (
     <>
-    <Draggable draggableId={card.id} index={index}>
+    <Draggable draggableId={card.id} index={index} isDragDisabled={isReadOnly}>
       {(provided, snapshot) => {
         const cardNode = (
           <div
@@ -105,7 +116,13 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
               }}
             />
           ) : (
-            <p onDoubleClick={(e)=>{ e.stopPropagation(); setIsEditingTitle(true); }}>{card.title}</p>
+            <p
+              onDoubleClick={(e)=> {
+                e.stopPropagation();
+                if (isReadOnly) return;
+                setIsEditingTitle(true);
+              }}
+            >{card.title}</p>
           )}
           <div className="card-footer">
             <div className="card-meta">
@@ -119,11 +136,15 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
               {assignedUser && <div className="card-avatar" style={{ backgroundColor: generateColorFromId(assignedUser.userId) }} title={assignedUser.name}>{getUserInitials(assignedUser.name, assignedUser.email)}</div>}
             </div>
             <div className="card-actions" style={{ display:'flex', gap:6, alignItems:'center' }}>
-              <button className="focus-button" onClick={(e) => { e.stopPropagation(); onStartFocus(card); }}>Focus</button>
-              <button onClick={(e)=>{ e.stopPropagation(); onToggleComplete(card); }} title={card.completed ? 'Marcar como pendiente' : 'Marcar como hecho'} disabled={busy}>{card.completed ? '↺' : '✓'}</button>
-              <button onClick={(e)=>{ e.stopPropagation(); /* archive toggle below */ onArchiveToggle(card); }} title={card.archived ? 'Restaurar' : 'Archivar'} disabled={busy}>{card.archived ? '📤' : '🗄'}</button>
-              <button onClick={(e)=>{ e.stopPropagation(); setIsEditingTitle(true); }} title="Renombrar" disabled={busy}>✎</button>
-              <button onClick={(e)=>{ e.stopPropagation(); setConfirmDelete(true); }} title="Eliminar" disabled={busy}>🗑</button>
+              {!isReadOnly ? (
+                <>
+                  <button className="focus-button" onClick={(e) => { e.stopPropagation(); onStartFocus(card); }}>Focus</button>
+                  <button onClick={(e)=>{ e.stopPropagation(); onToggleComplete(card); }} title={card.completed ? 'Marcar como pendiente' : 'Marcar como hecho'} disabled={busy}>{card.completed ? '↺' : '✓'}</button>
+                  <button onClick={(e)=>{ e.stopPropagation(); /* archive toggle below */ onArchiveToggle(card); }} title={card.archived ? 'Restaurar' : 'Archivar'} disabled={busy}>{card.archived ? '📤' : '🗄'}</button>
+                  <button onClick={(e)=>{ e.stopPropagation(); setIsEditingTitle(true); }} title="Renombrar" disabled={busy}>✎</button>
+                  <button onClick={(e)=>{ e.stopPropagation(); setConfirmDelete(true); }} title="Eliminar" disabled={busy}>🗑</button>
+                </>
+              ) : null}
             </div>
           </div>
           </div>
@@ -131,16 +152,18 @@ const Card: React.FC<CardProps> = ({ card, index, users, onEditCard, onStartFocu
         return snapshot.isDragging ? createPortal(cardNode, document.body) : cardNode;
       }}
     </Draggable>
-    <ConfirmDialog
-      open={confirmDelete}
-      title="Eliminar tarjeta"
-      message="Esta acción no se puede deshacer. ¿Deseas eliminar la tarjeta?"
-      confirmLabel="Eliminar"
-      cancelLabel="Cancelar"
-      busy={busy}
-      onCancel={()=> setConfirmDelete(false)}
-      onConfirm={deleteCard}
-    />
+    {!isReadOnly && (
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Eliminar tarjeta"
+        message="Esta acción no se puede deshacer. ¿Deseas eliminar la tarjeta?"
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        busy={busy}
+        onCancel={()=> setConfirmDelete(false)}
+        onConfirm={deleteCard}
+      />
+    )}
     </>
   );
 };

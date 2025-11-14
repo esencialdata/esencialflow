@@ -73,7 +73,8 @@ function App() {
   const [focusCard, setFocusCard] = useState<Card | null>(null);
   const [currentView, setCurrentView] = useState<View>('home');
   const [editingCard, setEditingCard] = useState<Card | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [visibleUsers, setVisibleUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [cardsVersion, setCardsVersion] = useState(0);
   const [focusListId, setFocusListId] = useState<string | null>(null);
@@ -151,9 +152,14 @@ function App() {
       email: resolved.email || reference.email,
     };
 
-    setUsers([resolvedUser]);
+    const uniqueUsers = [...normalized];
+    if (!uniqueUsers.some(user => user.userId === resolvedUser.userId)) {
+      uniqueUsers.push(resolvedUser);
+    }
+
+    setAllUsers(uniqueUsers);
     setSelectedUserId(prev => {
-      if (prev === resolvedUser.userId) {
+      if (prev && uniqueUsers.some(user => user.userId === prev)) {
         return prev;
       }
       return resolvedUser.userId;
@@ -173,9 +179,57 @@ function App() {
     if (firebaseUser) {
       fetchUsers();
     } else {
-      setUsers([]);
+      setAllUsers([]);
+      setVisibleUsers([]);
     }
   }, [firebaseUser]);
+
+  useEffect(() => {
+    const ensureSelection = (list: User[]) => {
+      if (!list.length) return;
+      setSelectedUserId(prev => {
+        if (prev && list.some(user => user.userId === prev)) {
+          return prev;
+        }
+        return list[0]?.userId || '';
+      });
+    };
+
+    const currentBoard = boards.find(board => board.boardId === currentBoardId);
+    if (!currentBoard) {
+      const fallback = allUsers.length ? allUsers : resolvedUserProfile.userId ? [resolvedUserProfile] : [];
+      setVisibleUsers(fallback);
+      ensureSelection(fallback);
+      return;
+    }
+
+    const allowedIds = new Set<string>();
+    if (typeof currentBoard.ownerId === 'string' && currentBoard.ownerId.trim()) {
+      allowedIds.add(currentBoard.ownerId.trim());
+    }
+    if (Array.isArray(currentBoard.memberIds)) {
+      currentBoard.memberIds.forEach(id => {
+        if (typeof id === 'string' && id.trim()) {
+          allowedIds.add(id.trim());
+        }
+      });
+    }
+    if (resolvedUserProfile.userId) {
+      allowedIds.add(resolvedUserProfile.userId);
+    }
+
+    const filtered = allUsers.filter(user => allowedIds.has(user.userId));
+    const finalList = filtered.length
+      ? filtered
+      : allUsers.length
+        ? allUsers
+        : resolvedUserProfile.userId
+          ? [resolvedUserProfile]
+          : [];
+
+    setVisibleUsers(finalList);
+    ensureSelection(finalList);
+  }, [allUsers, boards, currentBoardId, resolvedUserProfile]);
 
   useEffect(() => {
     if (effectiveUserId) {
@@ -257,8 +311,8 @@ function App() {
 
   const handleUpdateCard = async (updatedCard: Card) => {
     try {
-      if (!updatedCard.assignedToUserId && users.length === 1) {
-        updatedCard.assignedToUserId = users[0].userId;
+      if (!updatedCard.assignedToUserId && visibleUsers.length === 1) {
+        updatedCard.assignedToUserId = visibleUsers[0].userId;
       }
       await api.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch {}
@@ -384,9 +438,9 @@ function App() {
               <input ref={importInputRef} type="file" accept="application/json" style={{ display:'none' }} onChange={handleImportFile} />
             </>
           )}
-          {users.length > 1 && (
+          {visibleUsers.length > 1 && (
             <select onChange={(e) => setSelectedUserId(e.target.value)} value={selectedUserId} name="userSelector">
-              {users.map(u => (
+              {visibleUsers.map(u => (
                 <option key={u.userId} value={u.userId}>{u.name}</option>
               ))}
             </select>
@@ -447,7 +501,7 @@ function App() {
                   onStartFocus={handleStartFocus}
                   onEditCard={handleEditCard}
                   boardId={currentBoardId}
-                  users={users}
+                  users={visibleUsers}
                   currentUserId={effectiveUserId}
                   filters={boardFilters}
                   onChangeFilters={(f) => { setBoardFilters(f); try { localStorage.setItem('kanban.filters', JSON.stringify(f)); } catch {} }}
@@ -456,7 +510,7 @@ function App() {
                 <p>Selecciona un tablero.</p>
               );
             case 'myday':
-              return <MyDay userId={effectiveUserId} users={users} onEditCard={handleEditCard} onStartFocus={handleStartFocus} refreshKey={cardsVersion} />;
+              return <MyDay userId={effectiveUserId} users={visibleUsers} onEditCard={handleEditCard} onStartFocus={handleStartFocus} refreshKey={cardsVersion} />;
             case 'calendar':
               if (cardsLoading) return <LoadingOverlay message="Cargando calendario…" />;
               if (cardsError) return <p className="error-message">{cardsError}</p>;
@@ -470,7 +524,7 @@ function App() {
             case 'n8n':
               return <N8nIntegration />;
             default:
-              return currentBoardId ? <KanbanBoard onStartFocus={handleStartFocus} onEditCard={handleEditCard} boardId={currentBoardId} users={users} /> : <p>Selecciona un tablero.</p>;
+              return currentBoardId ? <KanbanBoard onStartFocus={handleStartFocus} onEditCard={handleEditCard} boardId={currentBoardId} users={visibleUsers} /> : <p>Selecciona un tablero.</p>;
           }
         })()}
       </main>
@@ -492,7 +546,7 @@ function App() {
       <EditCardModal
         isOpen={editingCard !== null}
         card={editingCard}
-        users={users}
+        users={visibleUsers}
         onClose={() => setEditingCard(null)}
         onSubmit={handleUpdateCard}
       />
