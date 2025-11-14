@@ -79,12 +79,18 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
   const dateKey = useMemo(() => toDateKey(targetDate), [targetDate]);
 
   const fetchDailyHabits = useCallback(async () => {
+    if (!userId) {
+      setHabits([]);
+      setError('Selecciona un usuario para ver hábitos');
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await api.get(`${API_URL}/habits/daily`, {
         params: {
           date: dateKey,
-          ...(userId ? { userId } : {}),
+          userId,
         },
       });
       const habitsData = Array.isArray(response.data) ? response.data : [];

@@ -2,13 +2,70 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import * as admin from 'firebase-admin';
+import fs from 'fs';
+import path from 'path';
 
 type ServiceAccountShape = {
   project_id?: string;
   storageBucket?: string;
 };
 
-type AuthedRequest = express.Request & { user?: admin.auth.DecodedIdToken };
+type UserRole = 'admin' | 'member' | 'manager' | 'client';
+
+type AuthedUserProfile = {
+  userId: string;
+  role: UserRole;
+  allowedBoardIds?: string[];
+  [key: string]: unknown;
+};
+
+type AuthedRequest = express.Request & {
+  user?: admin.auth.DecodedIdToken;
+  authedUser?: AuthedUserProfile | null;
+};
+
+const DEFAULT_USER_ROLE: UserRole = 'member';
+const CLIENT_USER_ROLE: UserRole = 'client';
+
+const normalizeUserRole = (value: unknown): UserRole => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'admin' || normalized === 'administrator') return 'admin';
+    if (normalized === 'manager' || normalized === 'gestor' || normalized === 'coordinator') return 'manager';
+    if (normalized === 'client' || normalized === 'cliente' || normalized === 'customer') return 'client';
+    if (normalized === 'member' || normalized === 'usuario' || normalized === 'user' || normalized === 'miembro') {
+      return 'member';
+    }
+  }
+  return DEFAULT_USER_ROLE;
+};
+
+const normalizeAllowedIds = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const list = value
+    .map(item => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+  return list.length ? list : undefined;
+};
+
+const getAuthedUserFromRequest = (req: AuthedRequest): AuthedUserProfile | null =>
+  req.authedUser ?? null;
+
+const getAllowedBoardIdsFromRequest = (req: AuthedRequest): string[] | undefined =>
+  getAuthedUserFromRequest(req)?.allowedBoardIds;
+
+const isClientUser = (req: AuthedRequest): boolean =>
+  getAuthedUserFromRequest(req)?.role === CLIENT_USER_ROLE;
+
+const ensureNonClientUser = (req: AuthedRequest, res: express.Response): boolean => {
+  if (isClientUser(req)) {
+    res.status(403).json({ message: 'Operation not permitted for client users' });
+    return false;
+  }
+  return true;
+};
 
 const getUserIdFromRequest = (req: AuthedRequest): string | null => {
   const uid = req.user?.uid;
@@ -82,7 +139,24 @@ const collectBoardMemberIds = (board: Record<string, unknown>): string[] => {
   return Array.from(unique);
 };
 
-const userHasBoardAccess = (board: Record<string, unknown>, userId: string, userEmail?: string | null): boolean => {
+const userHasBoardAccess = (
+  board: Record<string, unknown>,
+  userId: string,
+  userEmail?: string | null,
+  allowedBoardIds?: string[]
+): boolean => {
+  if (allowedBoardIds && allowedBoardIds.length) {
+    const candidateBoardId =
+      typeof board.boardId === 'string'
+        ? board.boardId.trim()
+        : typeof (board as any).id === 'string'
+          ? String((board as any).id).trim()
+          : '';
+    if (!candidateBoardId || !allowedBoardIds.includes(candidateBoardId)) {
+      return false;
+    }
+  }
+
   if (userId) {
     const members = collectBoardMemberIds(board);
     if (members.includes(userId)) {
@@ -187,13 +261,34 @@ const initializeFirebaseAdmin = () => {
     }
 
     try {
-      const serviceAccount = require('./serviceAccountKey.json') as ServiceAccountShape;
+      const candidatePaths = [
+        path.join(__dirname, 'serviceAccountKey.json'),
+        path.join(__dirname, '../src/serviceAccountKey.json'),
+        path.join(process.cwd(), 'serviceAccountKey.json')
+      ];
+      let serviceAccount: ServiceAccountShape | null = null;
+      let resolvedPath = '';
+      for (const candidate of candidatePaths) {
+        try {
+          if (fs.existsSync(candidate)) {
+            const raw = fs.readFileSync(candidate, 'utf8');
+            serviceAccount = JSON.parse(raw) as ServiceAccountShape;
+            resolvedPath = candidate;
+            break;
+          }
+        } catch {
+          // continue checking other paths
+        }
+      }
+      if (!serviceAccount) {
+        throw new Error('serviceAccountKey.json not found');
+      }
       const storageBucket = resolveStorageBucket(serviceAccount);
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
         ...(storageBucket ? { storageBucket } : {}),
       });
-      console.log('Firebase Admin SDK initialized using local serviceAccountKey.json');
+      console.log(`Firebase Admin SDK initialized using local serviceAccountKey.json (${resolvedPath})`);
       if (!storageBucket) {
         console.warn('No storage bucket configured. Attachment endpoints will be unavailable.');
       }
@@ -286,7 +381,29 @@ const requireAuth: express.RequestHandler = async (req, res, next) => {
 
   try {
     const decoded = await admin.auth().verifyIdToken(idToken);
-    (req as AuthedRequest).user = decoded;
+    const authedReq = req as AuthedRequest;
+    authedReq.user = decoded;
+
+    try {
+      const userDoc = await db.collection('users').doc(decoded.uid).get();
+      if (userDoc.exists) {
+        const rawData = userDoc.data() ?? {};
+        const role = normalizeUserRole((rawData as Record<string, unknown>).role);
+        const allowedBoardIds = normalizeAllowedIds((rawData as Record<string, unknown>).allowedBoardIds);
+        authedReq.authedUser = {
+          ...(rawData as Record<string, unknown>),
+          userId: decoded.uid,
+          role,
+          ...(allowedBoardIds ? { allowedBoardIds } : {}),
+        };
+      } else {
+        authedReq.authedUser = { userId: decoded.uid, role: DEFAULT_USER_ROLE };
+      }
+    } catch (profileError) {
+      console.error('Could not load user profile from Firestore:', profileError);
+      (req as AuthedRequest).authedUser = { userId: decoded.uid, role: DEFAULT_USER_ROLE };
+    }
+
     next();
   } catch (error) {
     console.error('Invalid auth token:', error);
@@ -381,14 +498,42 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+app.get('/api/me', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const profile = getAuthedUserFromRequest(authedReq);
+  if (!profile) {
+    res.status(404).json({ message: 'User profile not found' });
+    return;
+  }
+  const { userId, role, allowedBoardIds, ...rest } = profile;
+  const payload: Record<string, unknown> = {
+    userId,
+    role,
+  };
+  if (allowedBoardIds && allowedBoardIds.length) {
+    payload.allowedBoardIds = allowedBoardIds;
+  }
+  for (const [key, value] of Object.entries(rest)) {
+    if (value === undefined || key === 'userId' || key === 'role' || key === 'allowedBoardIds') {
+      continue;
+    }
+    payload[key] = value;
+  }
+  res.json(payload);
+});
+
 // Habits API
 app.get('/api/habits', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const requestedUserId = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+  const ownerId = requestedUserId || getUserIdFromRequest(authedReq);
+  if (!ownerId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
   try {
-    const { userId, includeArchived } = req.query as { userId?: string; includeArchived?: string };
-    let habitsQuery: admin.firestore.Query = db.collection('habits');
-    if (userId) {
-      habitsQuery = habitsQuery.where('userId', '==', userId);
-    }
+    const { includeArchived } = req.query as { includeArchived?: string };
+    let habitsQuery: admin.firestore.Query = db.collection('habits').where('userId', '==', ownerId);
     const snapshot = await habitsQuery.get();
     const include = includeArchived === 'true';
     const habits = snapshot.docs
@@ -402,17 +547,22 @@ app.get('/api/habits', async (req, res) => {
 });
 
 app.post('/api/habits', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { name, description, userId } = req.body || {};
     const trimmedName = typeof name === 'string' ? name.trim() : '';
-    if (!trimmedName || typeof userId !== 'string' || !userId.trim()) {
+    const ownerId = typeof userId === 'string' && userId.trim() ? userId.trim() : getUserIdFromRequest(authedReq);
+    if (!trimmedName || !ownerId) {
       return res.status(400).json({ message: 'name and userId are required' });
     }
 
     const habitPayload = {
       name: trimmedName,
       description: typeof description === 'string' ? description.trim() : '',
-      userId,
+      userId: ownerId,
       archived: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -428,6 +578,10 @@ app.post('/api/habits', async (req, res) => {
 });
 
 app.put('/api/habits/:habitId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { habitId } = req.params;
     const { name, description, archived } = req.body || {};
@@ -440,6 +594,12 @@ app.put('/api/habits/:habitId', async (req, res) => {
     const snap = await habitRef.get();
     if (!snap.exists) {
       return res.status(204).send();
+    }
+    const habitData = snap.data() as any;
+    const ownerId = habitData?.userId;
+    const authedUserId = getUserIdFromRequest(authedReq);
+    if (!authedUserId || (ownerId && authedUserId !== ownerId)) {
+      return res.status(403).json({ message: 'Habit does not belong to user' });
     }
 
     const updatePayload: Record<string, any> = {
@@ -462,12 +622,22 @@ app.put('/api/habits/:habitId', async (req, res) => {
 });
 
 app.delete('/api/habits/:habitId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { habitId } = req.params;
     const habitRef = db.collection('habits').doc(habitId);
     const snap = await habitRef.get();
     if (!snap.exists) {
       return res.status(404).json({ message: 'Habit not found' });
+    }
+    const habitData = snap.data() as any;
+    const ownerId = habitData?.userId;
+    const authedUserId = getUserIdFromRequest(authedReq);
+    if (!authedUserId || (ownerId && authedUserId !== ownerId)) {
+      return res.status(403).json({ message: 'Habit does not belong to user' });
     }
 
     const completionsSnap = await db
@@ -488,17 +658,19 @@ app.delete('/api/habits/:habitId', async (req, res) => {
 });
 
 app.get('/api/habits/daily', async (req, res) => {
+  const authedReq = req as AuthedRequest;
   try {
     const { userId, date } = req.query as { userId?: string; date?: string };
+    const ownerId = typeof userId === 'string' && userId.trim() ? userId.trim() : getUserIdFromRequest(authedReq);
+    if (!ownerId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
     const dateKey = sanitizeDateParam(date || null);
     if (!dateKey) {
       return res.status(400).json({ message: 'Invalid date parameter' });
     }
 
-    let habitsQuery: admin.firestore.Query = db.collection('habits');
-    if (userId) {
-      habitsQuery = habitsQuery.where('userId', '==', userId);
-    }
+    let habitsQuery: admin.firestore.Query = db.collection('habits').where('userId', '==', ownerId);
     const habitsSnapshot = await habitsQuery.get();
     const activeHabits = habitsSnapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() }))
@@ -508,10 +680,9 @@ app.get('/api/habits/daily', async (req, res) => {
       return res.json([]);
     }
 
-    let completionQuery = db.collection('habitCompletions').where('date', '==', dateKey);
-    if (userId) {
-      completionQuery = completionQuery.where('userId', '==', userId);
-    }
+    let completionQuery = db.collection('habitCompletions')
+      .where('date', '==', dateKey)
+      .where('userId', '==', ownerId);
     const completionsSnapshot = await completionQuery.get();
     const completions = new Map<string, any>();
     completionsSnapshot.docs.forEach(doc => {
@@ -540,9 +711,14 @@ app.get('/api/habits/daily', async (req, res) => {
 });
 
 app.post('/api/habits/:habitId/check', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { habitId } = req.params;
     const { date, userId } = req.body || {};
+    const actingUserId = getUserIdFromRequest(authedReq);
     const dateKey = sanitizeDateParam(date || null);
     if (!dateKey) {
       return res.status(400).json({ message: 'Invalid date parameter' });
@@ -554,7 +730,9 @@ app.post('/api/habits/:habitId/check', async (req, res) => {
       return res.status(404).json({ message: 'Habit not found' });
     }
     const habitData = habitSnap.data() as any;
-    if (userId && habitData.userId && userId !== habitData.userId) {
+    const ownerId = habitData?.userId;
+    const finalUserId = typeof userId === 'string' && userId.trim() ? userId.trim() : actingUserId;
+    if (!finalUserId || (ownerId && finalUserId !== ownerId)) {
       return res.status(403).json({ message: 'Habit does not belong to user' });
     }
 
@@ -562,7 +740,7 @@ app.post('/api/habits/:habitId/check', async (req, res) => {
     const completionRef = db.collection('habitCompletions').doc(completionId);
     const completionPayload = {
       habitId,
-      userId: habitData.userId,
+      userId: ownerId,
       date: dateKey,
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -577,9 +755,14 @@ app.post('/api/habits/:habitId/check', async (req, res) => {
 });
 
 app.delete('/api/habits/:habitId/check', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { habitId } = req.params;
     const { date, userId } = req.query as { date?: string; userId?: string };
+    const actingUserId = getUserIdFromRequest(authedReq);
     const dateKey = sanitizeDateParam(date || null);
     if (!dateKey) {
       return res.status(400).json({ message: 'Invalid date parameter' });
@@ -591,7 +774,9 @@ app.delete('/api/habits/:habitId/check', async (req, res) => {
       return res.status(404).json({ message: 'Habit not found' });
     }
     const habitData = habitSnap.data() as any;
-    if (userId && habitData.userId && userId !== habitData.userId) {
+    const ownerId = habitData?.userId;
+    const finalUserId = typeof userId === 'string' && userId.trim() ? userId.trim() : actingUserId;
+    if (!finalUserId || (ownerId && finalUserId !== ownerId)) {
       return res.status(403).json({ message: 'Habit does not belong to user' });
     }
 
@@ -615,6 +800,7 @@ app.get('/api/boards', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
   const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -628,7 +814,7 @@ app.get('/api/boards', async (req, res) => {
         const data = doc.data() ?? {};
         return { boardId: doc.id, ...data };
       })
-      .filter(board => userHasBoardAccess(board, userId, userEmail));
+      .filter(board => userHasBoardAccess(board, userId, userEmail, allowedBoardIds));
     console.log(`[API] /api/boards -> ${boards.length} registros visibles para ${userId}`);
     res.json(boards);
   } catch (error) {
@@ -641,6 +827,7 @@ app.get('/api/boards/:boardId', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
   const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -655,7 +842,7 @@ app.get('/api/boards/:boardId', async (req, res) => {
       return;
     }
     const boardData = { boardId: doc.id, ...doc.data() };
-    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+    if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
       res.status(403).json({ message: 'Board not accessible' });
       return;
     }
@@ -669,6 +856,9 @@ app.get('/api/boards/:boardId', async (req, res) => {
 app.post('/api/boards', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -706,6 +896,9 @@ app.post('/api/boards', async (req, res) => {
 app.put('/api/boards/:boardId', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -760,6 +953,9 @@ app.put('/api/boards/:boardId', async (req, res) => {
 app.delete('/api/boards/:boardId', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -824,6 +1020,7 @@ app.get('/api/boards/:boardId/cards', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
   const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -836,8 +1033,8 @@ app.get('/api/boards/:boardId/cards', async (req, res) => {
       res.status(404).json({ message: 'Board not found' });
       return;
     }
-    const boardData = boardSnap.data() ?? {};
-    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+    const boardData = { boardId, ...boardSnap.data() };
+    if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
       res.status(403).json({ message: 'Board not accessible' });
       return;
     }
@@ -868,6 +1065,7 @@ app.get('/api/boards/:boardId/lists', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
   const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -880,8 +1078,8 @@ app.get('/api/boards/:boardId/lists', async (req, res) => {
       res.status(404).json({ message: 'Board not found' });
       return;
     }
-    const boardData = boardSnap.data() ?? {};
-    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+    const boardData = { boardId, ...boardSnap.data() };
+    if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
       res.status(403).json({ message: 'Board not accessible' });
       return;
     }
@@ -901,8 +1099,13 @@ app.post('/api/boards/:boardId/lists', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
   const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
+  if (!ensureNonClientUser(authedReq, res)) {
     return;
   }
 
@@ -913,8 +1116,8 @@ app.post('/api/boards/:boardId/lists', async (req, res) => {
       res.status(404).json({ message: 'Board not found' });
       return;
     }
-    const boardData = boardSnap.data() ?? {};
-    if (!userHasBoardAccess(boardData, userId, userEmail)) {
+    const boardData = { boardId, ...boardSnap.data() };
+    if (!userHasBoardAccess(boardData, userId, userEmail, allowedBoardIds)) {
       res.status(403).json({ message: 'Board not accessible' });
       return;
     }
@@ -935,6 +1138,10 @@ app.post('/api/boards/:boardId/lists', async (req, res) => {
 });
 
 app.put('/api/lists/:listId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { listId } = req.params;
     const updatedListData = {
@@ -950,6 +1157,10 @@ app.put('/api/lists/:listId', async (req, res) => {
 });
 
 app.delete('/api/lists/:listId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { listId } = req.params;
     const batch = db.batch();
@@ -1008,6 +1219,7 @@ app.get('/api/cards/today', async (req, res) => {
 
 // Flexible search by due date range, optionally filter by userId
 app.get('/api/cards/search', async (req, res) => {
+  const authedReq = req as AuthedRequest;
   try {
     const { start, end, userId } = req.query as { start?: string; end?: string; userId?: string };
     if (!start || !end) {
@@ -1020,15 +1232,18 @@ app.get('/api/cards/search', async (req, res) => {
       return res.status(400).json({ message: 'invalid start or end date' });
     }
 
+    const startTimestamp = admin.firestore.Timestamp.fromDate(startDate);
+    const endTimestamp = admin.firestore.Timestamp.fromDate(endDate);
     const snapshot = await db
       .collection('cards')
-      .where('dueDate', '>=', startDate)
-      .where('dueDate', '<', endDate)
+      .where('dueDate', '>=', startTimestamp)
+      .where('dueDate', '<', endTimestamp)
       .get();
 
     let cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    if (userId) {
-      cards = cards.filter((c: any) => c.assignedToUserId === userId);
+    const filterUserId = (typeof userId === 'string' && userId.trim()) || getUserIdFromRequest(authedReq);
+    if (filterUserId) {
+      cards = cards.filter((c: any) => c.assignedToUserId === filterUserId);
     }
     res.json(cards);
   } catch (error) {
@@ -1051,6 +1266,10 @@ app.get('/api/lists/:listId/cards', async (req, res) => {
 });
 
 app.post('/api/lists/:listId/cards', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { listId } = req.params;
     const incoming = { ...req.body } as any;
@@ -1099,6 +1318,10 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
 });
 
 app.put('/api/cards/:cardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId } = req.params;
     const incoming = { ...req.body } as any;
@@ -1123,6 +1346,10 @@ app.put('/api/cards/:cardId', async (req, res) => {
 });
 
 app.patch('/api/cards/:cardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId } = req.params;
     const incoming = { ...req.body } as any;
@@ -1175,6 +1402,10 @@ app.patch('/api/cards/:cardId', async (req, res) => {
 });
 
 app.delete('/api/cards/:cardId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId } = req.params;
     await db.collection('cards').doc(cardId).delete();
@@ -1187,6 +1418,10 @@ app.delete('/api/cards/:cardId', async (req, res) => {
 
 // Attachments API
 app.post('/api/cards/:cardId/request-upload-url', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   const { cardId } = req.params;
   const { fileName, fileType } = req.body;
 
@@ -1218,6 +1453,10 @@ app.post('/api/cards/:cardId/request-upload-url', async (req, res) => {
 });
 
 app.post('/api/cards/:cardId/attachments', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   const { cardId } = req.params;
   const attachmentData = req.body;
 
@@ -1270,6 +1509,10 @@ app.get('/api/cards/:cardId/attachments/signed-read', async (req, res) => {
 
 // Remove an attachment from a card (and optionally delete the object in GCS)
 app.delete('/api/cards/:cardId/attachments/:attachmentId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   const { cardId, attachmentId } = req.params;
   const { deleteObject } = req.query as { deleteObject?: string };
   try {
@@ -1309,6 +1552,10 @@ app.delete('/api/cards/:cardId/attachments/:attachmentId', async (req, res) => {
 
 // Batch reorder cards (position and optional listId) for performance
 app.post('/api/cards/reorder-batch', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const updates = req.body && Array.isArray(req.body.updates) ? req.body.updates : null;
     if (!updates || updates.length === 0) {
@@ -1336,6 +1583,10 @@ app.post('/api/cards/reorder-batch', async (req, res) => {
 
 // Timer Sessions API
 app.post('/api/timer-sessions', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const newSessionData = {
       ...req.body,
@@ -1351,6 +1602,10 @@ app.post('/api/timer-sessions', async (req, res) => {
 });
 
 app.patch('/api/timer-sessions/:sessionId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { sessionId } = req.params;
     const updatedSessionData = {
@@ -1367,6 +1622,10 @@ app.patch('/api/timer-sessions/:sessionId', async (req, res) => {
 
 // Webhooks API
 app.post('/api/webhooks', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const newWebhookData = {
       ...req.body,
@@ -1404,6 +1663,10 @@ app.get('/api/cards/:cardId/comments', async (req, res) => {
 });
 
 app.post('/api/cards/:cardId/comments', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId } = req.params;
     const { authorUserId, text, mentions } = req.body || {};
@@ -1450,6 +1713,10 @@ app.post('/api/cards/:cardId/comments', async (req, res) => {
 });
 
 app.put('/api/cards/:cardId/comments/:commentId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId, commentId } = req.params;
     const { text, mentions } = req.body || {};
@@ -1496,6 +1763,10 @@ app.put('/api/cards/:cardId/comments/:commentId', async (req, res) => {
 });
 
 app.delete('/api/cards/:cardId/comments/:commentId', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   try {
     const { cardId, commentId } = req.params;
     const ref = db.collection('comments').doc(commentId);
@@ -1529,11 +1800,28 @@ app.get('/api/webhooks', async (req, res) => {
 
 // Export board (board + lists + cards + comments)
 app.get('/api/boards/:boardId/export', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  const userEmail = typeof authedReq.user?.email === 'string' ? authedReq.user.email : null;
+  const allowedBoardIds = getAllowedBoardIdsFromRequest(authedReq);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+  if (isClientUser(authedReq)) {
+    res.status(403).json({ message: 'Operation not permitted for client users' });
+    return;
+  }
   try {
     const { boardId } = req.params;
     const boardRef = db.collection('boards').doc(boardId);
     const boardSnap = await boardRef.get();
     if (!boardSnap.exists) return res.status(404).json({ message: 'Board not found' });
+    const board = { boardId: boardSnap.id, ...boardSnap.data() };
+    if (!userHasBoardAccess(board, userId, userEmail, allowedBoardIds)) {
+      res.status(403).json({ message: 'Board not accessible' });
+      return;
+    }
 
     const listsSnap = await db.collection('lists').where('boardId', '==', boardId).get();
     const lists = listsSnap.docs.map(d => ({ listId: d.id, ...d.data() }));
@@ -1559,7 +1847,6 @@ app.get('/api/boards/:boardId/export', async (req, res) => {
       // Note: for >10 cardIds habría que paginar; MVP incluye comentarios del primer batch.
     }
 
-    const board = { boardId: boardSnap.id, ...boardSnap.data() };
     res.json({ board, lists, cards, comments, exportedAt: new Date().toISOString() });
   } catch (error) {
     console.error('Error exporting board:', error);
@@ -1571,6 +1858,9 @@ app.get('/api/boards/:boardId/export', async (req, res) => {
 app.post('/api/boards/import', async (req, res) => {
   const authedReq = req as AuthedRequest;
   const userId = getUserIdFromRequest(authedReq);
+  if (!ensureNonClientUser(authedReq, res)) {
+    return;
+  }
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;

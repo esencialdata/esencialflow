@@ -23,6 +23,8 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
   const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
   const [editingHabitValue, setEditingHabitValue] = useState('');
 
+  const effectiveUserId = (userId && userId.trim()) || users[0]?.userId || '';
+
   const {
     habits,
     isLoading: habitsLoading,
@@ -34,7 +36,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
     toggleHabit,
     updateHabit,
     deleteHabit,
-  } = useHabits(userId);
+  } = useHabits(effectiveUserId || undefined);
 
   // Robust parser for dueDate
   const parseDate = (value: any): Date | undefined => {
@@ -59,10 +61,15 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
     const fetchCards = async () => {
       try {
         setLoading(true);
+        if (!effectiveUserId) {
+          setTodaysCards([]);
+          setError('Selecciona un usuario para ver tus tareas de hoy');
+          return;
+        }
         const today = toLocalDateOnly(new Date());
         const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
         const params = new URLSearchParams({ start: today.toISOString(), end: tomorrow.toISOString() });
-        if (userId) params.set('userId', userId);
+        params.set('userId', effectiveUserId);
         const response = await api.get<any[]>(`${API_URL}/cards/search?${params.toString()}`);
         const filtered = response.data
           .map((c: any) => ({ ...c, dueDate: parseDate(c.dueDate) }))
@@ -78,7 +85,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
       }
     };
     fetchCards();
-  }, [userId, refreshKey]);
+  }, [effectiveUserId, refreshKey]);
 
   const handleCardClick = (card: CardType) => (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.focus-button')) return;
@@ -90,11 +97,11 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
     onStartFocus(card);
   };
 
-  const canManageHabits = Boolean(userId);
+  const canManageHabits = Boolean(effectiveUserId);
 
   const handleSubmitHabit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHabitName.trim()) return;
+    if (!canManageHabits || !newHabitName.trim()) return;
     const created = await createHabit(newHabitName);
     if (created) {
       setNewHabitName('');
@@ -107,7 +114,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
   };
 
   const handleSaveHabit = async (habitId: string) => {
-    if (!editingHabitValue.trim()) return;
+    if (!canManageHabits || !editingHabitValue.trim()) return;
     const ok = await updateHabit(habitId, editingHabitValue);
     if (ok) {
       setEditingHabitId(null);
@@ -116,6 +123,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
   };
 
   const handleDeleteHabit = async (habitId: string) => {
+    if (!canManageHabits) return;
     const confirmed = window.confirm('¿Eliminar este hábito? Se borrarán sus registros diarios.');
     if (!confirmed) return;
     await deleteHabit(habitId);
@@ -155,9 +163,9 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
             placeholder="Agregar nuevo hábito"
             value={newHabitName}
             onChange={(e) => setNewHabitName(e.target.value)}
-            disabled={habitCreating}
+            disabled={habitCreating || !canManageHabits}
           />
-          <button type="submit" disabled={habitCreating || !newHabitName.trim()}>
+          <button type="submit" disabled={habitCreating || !newHabitName.trim() || !canManageHabits}>
             {habitCreating ? 'Guardando…' : 'Agregar'}
           </button>
         </form>
@@ -176,7 +184,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
                     type="checkbox"
                     checked={habit.completed}
                     onChange={() => toggleHabit(habit.id)}
-                    disabled={pendingHabitId === habit.id || updatingHabitId === habit.id || habitsLoading}
+                    disabled={!canManageHabits || pendingHabitId === habit.id || updatingHabitId === habit.id || habitsLoading}
                   />
                   {editingHabitId === habit.id ? (
                     <input
@@ -196,7 +204,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
                         type="button"
                         className="habit-action"
                         onClick={() => handleSaveHabit(habit.id)}
-                        disabled={updatingHabitId === habit.id || !editingHabitValue.trim()}
+                        disabled={!canManageHabits || updatingHabitId === habit.id || !editingHabitValue.trim()}
                       >
                         Guardar
                       </button>
@@ -204,7 +212,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
                         type="button"
                         className="habit-action"
                         onClick={() => { setEditingHabitId(null); setEditingHabitValue(''); }}
-                        disabled={updatingHabitId === habit.id}
+                        disabled={!canManageHabits || updatingHabitId === habit.id}
                       >
                         Cancelar
                       </button>
@@ -215,7 +223,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
                         type="button"
                         className="habit-action"
                         onClick={() => beginEditHabit(habit.id, habit.name)}
-                        disabled={updatingHabitId === habit.id}
+                        disabled={!canManageHabits || updatingHabitId === habit.id}
                       >
                         Editar
                       </button>
@@ -223,7 +231,7 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
                         type="button"
                         className="habit-action danger"
                         onClick={() => handleDeleteHabit(habit.id)}
-                        disabled={updatingHabitId === habit.id}
+                        disabled={!canManageHabits || updatingHabitId === habit.id}
                       >
                         Borrar
                       </button>

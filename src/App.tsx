@@ -112,20 +112,62 @@ function App() {
     },
   ];
 
+  const resolveCurrentUser = (): User => {
+    const uid = firebaseUser?.uid?.trim();
+    const displayName = firebaseUser?.displayName?.trim();
+    const email = firebaseUser?.email?.trim();
+    return {
+      userId: uid || fallbackUsers[0].userId,
+      name: displayName || email || fallbackUsers[0].name,
+      email: email || fallbackUsers[0].email,
+    };
+  };
+
   const applyUsers = (list: User[]) => {
-    if (!list.length) {
-      setUsers(fallbackUsers);
-      setSelectedUserId(prev => prev || fallbackUsers[0].userId);
-      return;
-    }
-    setUsers(list);
+    const normalized = Array.isArray(list)
+      ? list
+          .map(user => {
+            const userId = typeof user.userId === 'string' ? user.userId.trim() : '';
+            if (!userId) return null;
+            return { ...user, userId } as User;
+          })
+          .filter((candidate): candidate is User => Boolean(candidate))
+      : [];
+
+    const uid = firebaseUser?.uid?.trim();
+    const email = firebaseUser?.email?.trim().toLowerCase();
+
+    const matchById = uid ? normalized.find(user => user.userId === uid) : undefined;
+    const matchByEmail = email
+      ? normalized.find(user => typeof user.email === 'string' && user.email.trim().toLowerCase() === email)
+      : undefined;
+
+    const resolved = matchById || matchByEmail || resolveCurrentUser();
+    const reference = resolveCurrentUser();
+    const resolvedUser: User = {
+      ...resolved,
+      userId: (resolved.userId || reference.userId).trim(),
+      name: resolved.name || reference.name,
+      email: resolved.email || reference.email,
+    };
+
+    setUsers([resolvedUser]);
     setSelectedUserId(prev => {
-      if (prev && list.some(u => u.userId === prev)) {
+      if (prev === resolvedUser.userId) {
         return prev;
       }
-      return list[0].userId;
+      return resolvedUser.userId;
     });
   };
+
+  const resolvedUserProfile = useMemo(() => resolveCurrentUser(), [firebaseUser]);
+  const effectiveUserId = selectedUserId || resolvedUserProfile.userId;
+
+  useEffect(() => {
+    if (!selectedUserId && resolvedUserProfile.userId) {
+      setSelectedUserId(resolvedUserProfile.userId);
+    }
+  }, [selectedUserId, resolvedUserProfile.userId]);
 
   useEffect(() => {
     if (firebaseUser) {
@@ -136,10 +178,10 @@ function App() {
   }, [firebaseUser]);
 
   useEffect(() => {
-    if (selectedUserId) {
-      pomodoro.setUserId(selectedUserId);
+    if (effectiveUserId) {
+      pomodoro.setUserId(effectiveUserId);
     }
-  }, [selectedUserId, pomodoro]);
+  }, [effectiveUserId, pomodoro]);
 
   const fetchUsers = async () => {
     try {
@@ -406,7 +448,7 @@ function App() {
                   onEditCard={handleEditCard}
                   boardId={currentBoardId}
                   users={users}
-                  currentUserId={selectedUserId}
+                  currentUserId={effectiveUserId}
                   filters={boardFilters}
                   onChangeFilters={(f) => { setBoardFilters(f); try { localStorage.setItem('kanban.filters', JSON.stringify(f)); } catch {} }}
                 />
@@ -414,7 +456,7 @@ function App() {
                 <p>Selecciona un tablero.</p>
               );
             case 'myday':
-              return <MyDay userId={selectedUserId} users={users} onEditCard={handleEditCard} onStartFocus={handleStartFocus} refreshKey={cardsVersion} />;
+              return <MyDay userId={effectiveUserId} users={users} onEditCard={handleEditCard} onStartFocus={handleStartFocus} refreshKey={cardsVersion} />;
             case 'calendar':
               if (cardsLoading) return <LoadingOverlay message="Cargando calendario…" />;
               if (cardsError) return <p className="error-message">{cardsError}</p>;
