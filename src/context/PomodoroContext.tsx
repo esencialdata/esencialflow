@@ -28,6 +28,11 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const defaultFocus = 25;
   const defaultBreak = 5;
 
+  // Refs & State
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const STORAGE_KEY = 'pomodoro_state';
+
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [remainingSec, setRemainingSec] = useState(defaultFocus * 60);
@@ -36,7 +41,20 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('user-1');
-  const workerRef = useRef<Worker | null>(null);
+
+  // Persistence Helpers
+  const saveState = useCallback((state: any) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...state,
+        savedAt: Date.now()
+      }));
+    } catch { }
+  }, []);
+
+  const clearState = useCallback(() => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { }
+  }, []);
 
   // Refs to hold current state for useCallback without dependencies
   const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId });
@@ -119,7 +137,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setPhase('focus');
       setRemainingSec(focusLen * 60);
     }
-  }, [notify]);
+  }, [notify, clearState]);
 
   useEffect(() => {
     const worker = new Worker('/pomodoro-worker.js');
@@ -152,15 +170,35 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isRunning) {
-        // Optional: Force a sync or check context, but worker 'tick' should handle it.
-        // We could also re-verify permission here.
-        console.log('App visible, checking timer sync...');
+      if (document.visibilityState === 'visible') {
+        // Re-check storage to sync drift
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved.isRunning && saved.targetEndTime) {
+              const now = Date.now();
+              const diff = Math.ceil((saved.targetEndTime - now) / 1000);
+              if (diff > 0) {
+                setRemainingSec(diff);
+                // Ensure worker is in sync
+                workerRef.current?.postMessage({
+                  command: 'start',
+                  seconds: diff,
+                  endTime: saved.targetEndTime
+                });
+              } else if (saved.isRunning) {
+                // It finished while backgrounded
+                handlePhaseComplete();
+              }
+            }
+          }
+        } catch { }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isRunning]);
+  }, [handlePhaseComplete]);
 
   const start = async () => {
     const { activeCard, isRunning, userId, phase } = stateRef.current;
@@ -169,11 +207,26 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Request permission explicitly on user interaction (start)
     await ensureNotifyPermission();
 
+    // Play silent audio to keep background alive
+    audioRef.current?.play().catch(() => console.log('Audio play failed'));
+
     setIsRunning(true);
 
     // Calculate Absolute End Time to prevent drift
     const now = Date.now();
     const targetEndTime = now + (remainingSec * 1000);
+
+    // Save Initial State
+    saveState({
+      activeCard,
+      userId,
+      phase,
+      sessionId: null, // Will update when API returns
+      isRunning: true,
+      targetEndTime,
+      focusLen,
+      breakLen
+    });
 
     workerRef.current?.postMessage({
       command: 'start',
@@ -189,7 +242,20 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           type: phase,
         });
         const id = (res.data?.id) || res.data?.sessionId || null;
-        if (id) setSessionId(id);
+        if (id) {
+          setSessionId(id);
+          // Update saved state with session ID
+          saveState({
+            activeCard,
+            userId,
+            phase,
+            sessionId: id,
+            isRunning: true,
+            targetEndTime,
+            focusLen,
+            breakLen
+          });
+        }
       } catch (e) {
         console.error('Failed to create timer session', e);
       }
@@ -198,13 +264,18 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const pause = () => {
     setIsRunning(false);
+    clearState();
     workerRef.current?.postMessage({ command: 'pause' });
+    audioRef.current?.pause();
   };
 
   const stop = async () => {
     const { phase, focusLen, breakLen, sessionId, activeCard } = stateRef.current;
     setIsRunning(false);
+    clearState();
     workerRef.current?.postMessage({ command: 'stop' });
+    audioRef.current?.pause();
+
     const total = (phase === 'focus' ? focusLen : breakLen) * 60;
     if (sessionId) {
       try {
@@ -224,7 +295,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const setPreset = (f: number, b: number) => {
     setIsRunning(false);
+    clearState();
     workerRef.current?.postMessage({ command: 'stop' });
+    audioRef.current?.pause();
     setFocusLen(f);
     setBreakLen(b);
     setPhase('focus');
