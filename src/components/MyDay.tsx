@@ -66,14 +66,47 @@ const MyDay: React.FC<MyDayProps> = ({ userId, users, onEditCard, onStartFocus, 
           setError('Selecciona un usuario para ver tus tareas de hoy');
           return;
         }
-        const today = toLocalDateOnly(new Date());
-        const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-        const params = new URLSearchParams({ start: today.toISOString(), end: tomorrow.toISOString() });
+
+        const now = new Date();
+        const todayLocal = toLocalDateOnly(now);
+        
+        // Widen query range: Start from Yesterday (-24h) to covers UTC lags
+        // End at Tomorrow (+24h) to cover future UTC leads
+        const startQuery = new Date(todayLocal);
+        startQuery.setDate(startQuery.getDate() - 1);
+        
+        const endQuery = new Date(todayLocal);
+        endQuery.setDate(endQuery.getDate() + 1);
+
+        const params = new URLSearchParams({ 
+          start: startQuery.toISOString(), 
+          end: endQuery.toISOString() 
+        });
         params.set('userId', effectiveUserId);
+        
         const response = await api.get<any[]>(`${API_URL}/cards/search?${params.toString()}`);
+        
+        const todayDateString = todayLocal.toISOString().split('T')[0]; // YYYY-MM-DD
+        const todayUtcString = now.toISOString().split('T')[0];
+        
         const filtered = response.data
           .map((c: any) => ({ ...c, dueDate: parseDate(c.dueDate) }))
-          .filter((c: any) => !c.completed) as CardType[];
+          .filter((c: any) => {
+            if (c.completed) return false;
+            // Check if matches Today in Local OR Today in UTC
+            if (!c.dueDate) return false;
+            
+            // Local Match
+            const d = c.dueDate;
+            const localYMD = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            if (localYMD === todayDateString) return true;
+
+            // UTC Match (for tasks saved purely as UTC midnight date)
+            const utcYMD = d.toISOString().split('T')[0];
+            if (utcYMD === todayUtcString) return true;
+
+            return false;
+          }) as CardType[];
 
         setTodaysCards(filtered);
         setError(null);
