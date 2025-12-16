@@ -239,14 +239,14 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [handlePhaseComplete]);
 
   const start = async () => {
+    // 1. Play audio IMMEDIATELY to secure "user gesture" before async/await
+    audioRef.current?.play().catch(() => console.log('Audio play failed'));
+
     const { activeCard, isRunning, userId, phase } = stateRef.current;
     if (!activeCard || isRunning) return;
 
     // Request permission explicitly on user interaction (start)
     await ensureNotifyPermission();
-
-    // Play silent audio to keep background alive
-    audioRef.current?.play().catch(() => console.log('Audio play failed'));
 
     setIsRunning(true);
 
