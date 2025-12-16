@@ -6,6 +6,9 @@
   height: calc(100vh - 140px);
   height: calc(100dvh - 140px);
   /* Mobile viewport fix */
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .filter-chip {
@@ -29,6 +32,19 @@
   gap: 10px;
   box-shadow: 0 6px 14px var(--color-shadow-light);
   border: 1px solid var(--color-border-light);
+  scroll-snap-align: center;
+}
+
+@media (max-width: 768px) {
+  .kanban-board {
+    padding: 8px 16px;
+    gap: 12px;
+  }
+
+  .list {
+    width: 85vw;
+    /* Show most of the list, peek at others */
+  }
 }
 
 .list.focused {
