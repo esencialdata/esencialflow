@@ -60,6 +60,44 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId });
   stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId };
 
+  // Rehydrate state on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.targetEndTime) {
+          const now = Date.now();
+          const diff = Math.ceil((saved.targetEndTime - now) / 1000);
+
+          if (saved.isRunning && diff > 0) {
+            // Resume running
+            setActiveCard(saved.activeCard);
+            setUserId(saved.userId);
+            setPhase(saved.phase);
+            setSessionId(saved.sessionId);
+            setFocusLen(saved.focusLen);
+            setBreakLen(saved.breakLen);
+            setRemainingSec(diff);
+            setIsRunning(true);
+
+            // Sync worker and audio
+            setTimeout(() => {
+              workerRef.current?.postMessage({
+                command: 'start',
+                seconds: diff,
+                endTime: saved.targetEndTime
+              });
+              audioRef.current?.play().catch(() => { });
+            }, 500);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to rehydrate', e);
+    }
+  }, []);
+
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
     const s = Math.floor(remainingSec % 60).toString().padStart(2, '0');
