@@ -17,7 +17,7 @@
 }
 
 .App-header {
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
   padding: 16px 20px;
   display: flex;
   align-items: center;
@@ -153,11 +153,126 @@
   color: #61dafb;
 }
 
+/* Board Menu (Similar to User Menu) */
+.board-menu-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.board-menu-trigger {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid transparent;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.board-menu-trigger:hover,
+.board-menu-trigger:active {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.board-menu-dropdown {
+  position: absolute;
+  top: 40px;
+  right: auto;
+  left: 0;
+  background: rgba(9, 13, 23, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.5);
+  padding: 6px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 50;
+}
+
+.board-menu-dropdown button {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.board-menu-dropdown button:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-accent-blue);
+}
+
+.menu-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+  width: 100%;
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .App-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .App-header nav {
+    justify-content: center;
+    order: 2;
+    /* Move nav to bottom of header if desired, or keep top */
+    width: 100%;
+    overflow-x: auto;
+    /* Allow scroll if many links */
+    padding-bottom: 4px;
+  }
+
+  .board-selector {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .user-menu {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  /* Make header stack differently: 
+     Row 1: Board Selector (Left), User (Right)
+     Row 2: Nav
+  */
+  .App-header {
+    position: relative;
+    align-items: flex-start;
+  }
+
+  .board-selector {
+    margin-right: 40px;
+    /* Space for user avatar */
   }
 }

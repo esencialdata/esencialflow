@@ -79,6 +79,20 @@ function App() {
   const [cardsVersion, setCardsVersion] = useState(0);
   const [focusListId, setFocusListId] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const boardMenuRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!boardMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (boardMenuRef.current && !boardMenuRef.current.contains(event.target as Node)) {
+        setBoardMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [boardMenuOpen]);
+
   const {
     boards,
     currentBoardId,
@@ -127,12 +141,12 @@ function App() {
   const applyUsers = (list: User[]) => {
     const normalized = Array.isArray(list)
       ? list
-          .map(user => {
-            const userId = typeof user.userId === 'string' ? user.userId.trim() : '';
-            if (!userId) return null;
-            return { ...user, userId } as User;
-          })
-          .filter((candidate): candidate is User => Boolean(candidate))
+        .map(user => {
+          const userId = typeof user.userId === 'string' ? user.userId.trim() : '';
+          if (!userId) return null;
+          return { ...user, userId } as User;
+        })
+        .filter((candidate): candidate is User => Boolean(candidate))
       : [];
 
     const uid = firebaseUser?.uid?.trim();
@@ -249,7 +263,7 @@ function App() {
 
   const handleStartFocus = (card: Card) => {
     setFocusCard(card);
-    try { pomodoro.setActiveCard(card); } catch {}
+    try { pomodoro.setActiveCard(card); } catch { }
   };
 
   const handleCloseFocus = () => {
@@ -306,7 +320,7 @@ function App() {
   const reloadBoardsAfterImport = async (selectId: string) => {
     try {
       setCurrentBoardId(selectId);
-    } catch {}
+    } catch { }
   };
 
   const handleUpdateCard = async (updatedCard: Card) => {
@@ -315,7 +329,7 @@ function App() {
         updatedCard.assignedToUserId = visibleUsers[0].userId;
       }
       await api.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
-      try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch { }
       setEditingCard(null);
       if (currentBoardId) {
         reloadCards(currentBoardId);
@@ -431,26 +445,42 @@ function App() {
           {currentBoard && (
             <span className={`board-priority ${currentBoard.priority}`}>Prioridad: {currentBoard.priority === 'high' ? 'Alta' : currentBoard.priority === 'low' ? 'Baja' : 'Media'}</span>
           )}
-          {currentBoardId && (
-            <>
-              <button onClick={exportBoard}>Exportar</button>
-              <button onClick={triggerImport}>Importar</button>
-              <input ref={importInputRef} type="file" accept="application/json" style={{ display:'none' }} onChange={handleImportFile} />
-            </>
-          )}
+
+          <div className="board-menu-container" ref={boardMenuRef}>
+            <button className="icon-btn board-menu-trigger" onClick={() => setBoardMenuOpen(!boardMenuOpen)} title="Opciones del tablero">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+                <circle cx="5" cy="12" r="1" />
+              </svg>
+            </button>
+            {boardMenuOpen && (
+              <div className="board-menu-dropdown">
+                {currentBoardId && (
+                  <>
+                    <button onClick={() => { setBoardMenuOpen(false); exportBoard(); }}>Exportar Tablero</button>
+                    <button onClick={() => { setBoardMenuOpen(false); triggerImport(); }}>Importar Tablero</button>
+                    <hr className="menu-divider" />
+                  </>
+                )}
+                <button onClick={() => { setBoardMenuOpen(false); setIsCreatingBoard(true); }}>Crear Nuevo Tablero</button>
+                {currentBoardId && boards.length > 0 && (
+                  <>
+                    <button onClick={() => { setBoardMenuOpen(false); handleEditBoardClick(); }}>Editar Actual</button>
+                    <button onClick={() => { setBoardMenuOpen(false); setConfirmDeleteBoard({ open: true, boardId: currentBoardId, busy: false }); }}>Eliminar Actual</button>
+                  </>
+                )}
+              </div>
+            )}
+            <input ref={importInputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={handleImportFile} />
+          </div>
+
           {visibleUsers.length > 1 && (
             <select onChange={(e) => setSelectedUserId(e.target.value)} value={selectedUserId} name="userSelector">
               {visibleUsers.map(u => (
                 <option key={u.userId} value={u.userId}>{u.name}</option>
               ))}
             </select>
-          )}
-          <button onClick={() => setIsCreatingBoard(true)}>Crear Tablero</button>
-          {currentBoardId && boards.length > 0 && (
-            <>
-              <button onClick={handleEditBoardClick}>Editar Tablero</button>
-              <button onClick={() => setConfirmDeleteBoard({ open: true, boardId: currentBoardId, busy: false })}>Eliminar Tablero</button>
-            </>
           )}
         </div>
         <div className="user-menu" ref={userMenuRef}>
@@ -488,7 +518,7 @@ function App() {
             return <p className="error-message">{boardsError}</p>;
           }
           if (boards.length === 0 && !isCreatingBoard) {
-              return <p>No hay tableros. ¡Crea uno para empezar!</p>;
+            return <p>No hay tableros. ¡Crea uno para empezar!</p>;
           }
 
           switch (currentView) {
@@ -504,7 +534,7 @@ function App() {
                   users={visibleUsers}
                   currentUserId={effectiveUserId}
                   filters={boardFilters}
-                  onChangeFilters={(f) => { setBoardFilters(f); try { localStorage.setItem('kanban.filters', JSON.stringify(f)); } catch {} }}
+                  onChangeFilters={(f) => { setBoardFilters(f); try { localStorage.setItem('kanban.filters', JSON.stringify(f)); } catch { } }}
                 />
               ) : (
                 <p>Selecciona un tablero.</p>

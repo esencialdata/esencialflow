@@ -4,6 +4,8 @@
   padding: 8px 12px 16px;
   overflow-x: auto;
   height: calc(100vh - 140px);
+  height: calc(100dvh - 140px);
+  /* Mobile viewport fix */
 }
 
 .filter-chip {
@@ -66,8 +68,10 @@
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
-  padding-right: 10px; /* deja espacio para la barra de scroll y no tape acciones a la derecha */
-  scrollbar-gutter: stable; /* reserva espacio para la barra (browsers modernos) */
+  padding-right: 10px;
+  /* deja espacio para la barra de scroll y no tape acciones a la derecha */
+  scrollbar-gutter: stable;
+  /* reserva espacio para la barra (browsers modernos) */
 }
 
 .kanban-board-header {
@@ -90,10 +94,19 @@
   box-shadow: 0 2px 5px var(--color-shadow-light);
 }
 
-.kanban-board-header button:hover { box-shadow: 0 4px 10px var(--color-shadow-light); }
+.kanban-board-header button:hover {
+  box-shadow: 0 4px 10px var(--color-shadow-light);
+}
 
-.add-card-form { display: flex; gap: 8px; }
-.add-card-form input { flex: 1; }
+.add-card-form {
+  display: flex;
+  gap: 8px;
+}
+
+.add-card-form input {
+  flex: 1;
+}
+
 .add-card-form select {
   border-radius: 8px;
   border: 1px solid var(--color-border);
