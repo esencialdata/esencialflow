@@ -53,7 +53,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
         await Notification.requestPermission();
       }
-    } catch {}
+    } catch { }
   };
 
   const playBeep = () => {
@@ -72,7 +72,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
       o.start();
       o.stop(ctx.currentTime + 0.65);
-    } catch {}
+    } catch { }
   };
 
   const notify = useCallback(async (title: string, body: string) => {
@@ -81,7 +81,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification(title, { body });
       }
-    } catch {}
+    } catch { }
     playBeep();
   }, []);
 
@@ -150,11 +150,36 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [phase, focusLen, breakLen, isRunning]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isRunning) {
+        // Optional: Force a sync or check context, but worker 'tick' should handle it.
+        // We could also re-verify permission here.
+        console.log('App visible, checking timer sync...');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isRunning]);
+
   const start = async () => {
     const { activeCard, isRunning, userId, phase } = stateRef.current;
     if (!activeCard || isRunning) return;
+
+    // Request permission explicitly on user interaction (start)
+    await ensureNotifyPermission();
+
     setIsRunning(true);
-    workerRef.current?.postMessage({ command: 'start', seconds: remainingSec });
+
+    // Calculate Absolute End Time to prevent drift
+    const now = Date.now();
+    const targetEndTime = now + (remainingSec * 1000);
+
+    workerRef.current?.postMessage({
+      command: 'start',
+      seconds: remainingSec,
+      endTime: targetEndTime
+    });
 
     if (!sessionId) {
       try {

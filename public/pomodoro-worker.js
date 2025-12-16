@@ -1,7 +1,7 @@
 let timerId = null;
 let remainingSeconds = 0;
 
-self.onmessage = function(e) {
+self.onmessage = function (e) {
   const { command, seconds } = e.data;
 
   switch (command) {
@@ -9,11 +9,23 @@ self.onmessage = function(e) {
       if (timerId) {
         clearInterval(timerId);
       }
-      remainingSeconds = seconds;
+
+      // We expect 'endTime' timestamp OR 'seconds' to calculate it
+      // Standardize on using endTime for robustness.
+      let targetTime = e.data.endTime;
+      if (!targetTime && seconds) {
+        targetTime = Date.now() + (seconds * 1000);
+      }
+
+      // Calculate initial remainder
+      remainingSeconds = Math.ceil((targetTime - Date.now()) / 1000);
       self.postMessage({ type: 'tick', remainingSeconds });
 
       timerId = setInterval(() => {
-        remainingSeconds--;
+        const now = Date.now();
+        const diff = Math.ceil((targetTime - now) / 1000);
+
+        remainingSeconds = diff;
         self.postMessage({ type: 'tick', remainingSeconds });
 
         if (remainingSeconds <= 0) {
