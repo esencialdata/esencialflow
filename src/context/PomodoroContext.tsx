@@ -120,14 +120,14 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = 'sine';
-      o.frequency.value = 880;
+      o.frequency.value = 660; // Lower pitch (was 880) for less strident sound
       o.connect(g);
       g.connect(ctx.destination);
       g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+      g.gain.exponentialRampToValueAtTime(0.6, ctx.currentTime + 0.1); // Louder (was 0.2)
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.8);
       o.start();
-      o.stop(ctx.currentTime + 0.65);
+      o.stop(ctx.currentTime + 0.9);
     } catch { }
   };
 

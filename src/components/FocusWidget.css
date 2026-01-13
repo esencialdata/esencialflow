@@ -80,9 +80,11 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  /* Ensure backgrounds match app theme if variables are copied correctly, 
-     but fallback to dark if vars missing */
-  background: var(--color-background-card, #1e293b);
+  /* Transparency and Blur */
+  background: rgba(15, 23, 42, 0.85);
+  /* Slate-900 with transparency */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--color-text, #f1f5f9);
 }
 
