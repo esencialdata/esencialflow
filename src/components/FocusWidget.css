@@ -71,8 +71,9 @@
 /* PiP Mode Overrides */
 .focus-widget.pip-mode {
   position: static;
-  /* Let it fill the PiP window */
+  /* Fixed width to prevent "enormous" resizing effects if window snaps */
   width: 100%;
+  max-width: 250px;
   height: 100%;
   box-shadow: none;
   border: none;
