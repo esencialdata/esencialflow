@@ -64,10 +64,14 @@ const FocusWidget: React.FC<{ onOpen?: () => void }> = ({ onOpen }) => {
       // Copy styles
       copyStyles(document, win.document);
 
-      // Apply basic styles to the PiP window body to ensure no margins and dark theme readiness
+      // Apply basic styles to the PiP window body to ensure no margins, dark theme, and centered content
       win.document.body.style.margin = '0';
-      win.document.body.style.backgroundColor = '#0f172a'; // Enforce dark background as OS transparency is not supported by standard Web PiP
-      // win.document.body.style.display = 'flex'; // Optional: if we want to center via body, but we handle it in .focus-widget.pip-mode
+      win.document.body.style.backgroundColor = '#0f172a';
+      win.document.body.style.display = 'flex';
+      win.document.body.style.alignItems = 'center';
+      win.document.body.style.justifyContent = 'center';
+      win.document.body.style.height = '100vh';
+      win.document.body.style.boxSizing = 'border-box';
 
       // Handle close
       win.addEventListener('pagehide', () => {
