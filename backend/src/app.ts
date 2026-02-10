@@ -228,7 +228,7 @@ const parseServiceAccount = (raw: string): (ServiceAccountShape & admin.ServiceA
   try {
     const decoded = Buffer.from(raw, 'base64').toString('utf8');
     attempts.unshift(decoded);
-  } catch {}
+  } catch { }
 
   for (const candidate of attempts) {
     if (!candidate || typeof candidate !== 'string') {
@@ -243,7 +243,7 @@ const parseServiceAccount = (raw: string): (ServiceAccountShape & admin.ServiceA
     }
     try {
       return JSON.parse(trimmed) as ServiceAccountShape & admin.ServiceAccount;
-    } catch {}
+    } catch { }
   }
   return null;
 };
@@ -1304,7 +1304,17 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
     webhooksSnapshot.docs.forEach(async (doc) => {
       const webhook = doc.data();
       try {
-        await axios.post(webhook.url, { event: 'card_created', card: newCard });
+        const enrichedPayload = {
+          event: 'card_created',
+          card: {
+            ...newCard,
+            userId: getUserIdFromRequest(authedReq), // Enriched: User ID
+          },
+          title: newCard.title, // Enriched: Explicit title
+          description: newCard.description, // Enriched: Explicit description
+          origin: 'user', // Enriched: Origin
+        };
+        await axios.post(webhook.url, enrichedPayload);
         console.log(`Webhook for card_created sent to ${webhook.url}`);
       } catch (webhookError) {
         console.error(`Error sending webhook to ${webhook.url}:`, webhookError);
@@ -1380,12 +1390,23 @@ app.patch('/api/cards/:cardId', async (req, res) => {
     const oldCardData = oldCardDoc.data();
 
     // Trigger webhooks for card_moved event if listId changed
-    if (oldCardData && oldCardData.listId !== updatedFields.listId) {
+    // Loop Prevention: Check X-Source header from n8n
+    const sourceHeader = req.headers['x-source'];
+    const isN8n = typeof sourceHeader === 'string' && sourceHeader.toLowerCase() === 'n8n';
+
+    if (!isN8n && oldCardData && oldCardData.listId !== updatedFields.listId) {
       const webhooksSnapshot = await db.collection('webhooks').where('triggerEvent', '==', 'card_moved').get();
       webhooksSnapshot.docs.forEach(async (doc) => {
         const webhook = doc.data();
         try {
-          await axios.post(webhook.url, { event: 'card_moved', cardId, oldListId: oldCardData.listId, newListId: updatedFields.listId, card: { id: cardId, ...updatedFields } });
+          await axios.post(webhook.url, {
+            event: 'card_moved',
+            cardId,
+            oldListId: oldCardData.listId,
+            newListId: updatedFields.listId,
+            card: { id: cardId, ...updatedFields },
+            origin: 'user' // Explicit origin
+          });
           console.log(`Webhook for card_moved sent to ${webhook.url}`);
         } catch (webhookError) {
           console.error(`Error sending webhook to ${webhook.url}:`, webhookError);
@@ -1600,6 +1621,90 @@ app.post('/api/timer-sessions', async (req, res) => {
     res.status(500).json({ message: "Error creating timer session" });
   }
 });
+
+// AI Triage Endpoint: Returns the next recommended task
+app.get('/api/focus/next', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    // Fetch meaningful cards (not done, not archived)
+    // Since Firestore filtering is limited, we might need to fetch a bit more or rely on client-side logic? 
+    // Ideally we query by status. But our schema uses 'completed' boolean.
+
+    // Strategy: Query active cards for this user (assignedTo)
+    const snapshot = await db.collection('cards')
+      .where('assignedToUserId', '==', userId)
+      .where('completed', '==', false)
+      .where('archived', '==', false)
+      .get();
+
+    const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+
+    if (cards.length === 0) {
+      return res.json({ message: 'No tasks available', task: null });
+    }
+
+    // Scoring Logic
+    // High Priority = 3, Medium = 2, Low = 1
+    // Due Date passed or today = Bonus
+    // CreatedAt (Oldest) = Tie breaker
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const priorityScore: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
+    const scored = cards.map(c => {
+      let score = priorityScore[c.priority || 'medium'] || 1;
+
+      // Due Date Bonus
+      if (c.dueDate) {
+        const due = toDate(c.dueDate); // helper: convert Timestamp/string to Date
+        if (due < now) score += 5; // Overdue is urgent
+        else if (due >= startOfDay && due < new Date(startOfDay.getTime() + 86400000)) score += 3; // Due today
+      }
+
+      // Oldest bonus (slightly) - to prevent starvation
+      // We won't add specific score but rely on sort order
+      return { card: c, score, createdAt: toDate(c.createdAt || now) };
+    });
+
+    // Sort based on score desc, then createdAt asc
+    scored.sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    const nextTask = scored[0].card;
+
+    // Simplify response for AI context
+    res.json({
+      task: {
+        id: nextTask.id,
+        title: nextTask.title,
+        description: nextTask.description,
+        priority: nextTask.priority,
+        listId: nextTask.listId,
+        dueDate: nextTask.dueDate
+      },
+      reason: `Score: ${scored[0].score}` // Explainability
+    });
+
+  } catch (error) {
+    console.error('Error in focus triage:', error);
+    res.status(500).json({ message: 'Error calculating next focus' });
+  }
+});
+
+// Helper for dates if not exists
+const toDate = (val: any): Date => {
+  if (!val) return new Date();
+  if (val.toDate) return val.toDate(); // Firestore Timestamp
+  return new Date(val);
+};
 
 app.patch('/api/timer-sessions/:sessionId', async (req, res) => {
   const authedReq = req as AuthedRequest;
@@ -1842,7 +1947,7 @@ app.get('/api/boards/:boardId/export', async (req, res) => {
     if (cards.length) {
       const cardIds = cards.map(c => c.id);
       // Not efficient cross-collection, but acceptable for export MVP (client can filter later)
-      const snap = await db.collection('comments').where('cardId', 'in', cardIds.slice(0,10)).get().catch(()=>null);
+      const snap = await db.collection('comments').where('cardId', 'in', cardIds.slice(0, 10)).get().catch(() => null);
       if (snap) comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       // Note: for >10 cardIds habría que paginar; MVP incluye comentarios del primer batch.
     }

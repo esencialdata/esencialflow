@@ -22,3 +22,5 @@ cors.json
 .env
 .env.*
 .env.local
+youtube_downloader/venv/
+youtube_downloader/downloads/

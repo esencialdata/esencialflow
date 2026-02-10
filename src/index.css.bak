@@ -70,23 +70,3 @@ input::placeholder { color: var(--color-text-muted); }
 .error-message {
   color: #ff8080;
 }
-
-
-/* Zen Mode Blur */
-body:has(.active-timer-overlay) #root > *:not(.active-timer-overlay) {
-  filter: blur(5px) grayscale(80%);
-  transition: filter 0.5s ease;
-}
-
-/* Fallback if :has not supported fully or structure differs, we can toggle class on body */
-.zen-mode-blur #root > *:not(.active-timer-overlay) {
-  filter: blur(5px) grayscale(80%);
-}
-
-
-/* Zen Mode Blur via class */
-body.zen-active #root {
-  filter: blur(5px) grayscale(80%);
-  transition: filter 0.5s ease;
-  pointer-events: none;
-}

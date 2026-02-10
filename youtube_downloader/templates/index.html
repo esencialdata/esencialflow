@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargador YouTube</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <h1>YouTube Downloader</h1>
+
+        <form action="/download" method="POST" onsubmit="document.getElementById('btn').classList.add('loading')">
+            <div class="input-group">
+                <label for="url">URL del Video</label>
+                <input type="text" id="url" name="url" placeholder="https://youtube.com/watch?v=..." required>
+            </div>
+
+            <div class="options">
+                <label class="radio-label">
+                    <input type="radio" name="format" value="video" checked>
+                    <span>Video (MP4)</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="format" value="audio">
+                    <span>Audio (MP3)</span>
+                </label>
+            </div>
+
+            <button type="submit" id="btn">
+                <span class="btn-text">Descargar</span>
+                <span class="spinner"></span>
+            </button>
+        </form>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for message in messages %}
+            {{ message }}
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% if not ffmpeg_available %}
+        <div
+            style="margin-top: 20px; font-size: 0.8rem; color: #ffeb3b; background: rgba(255, 235, 59, 0.1); padding: 10px; border-radius: 4px;">
+            ⚠️ <strong>FFmpeg no detectado.</strong><br>
+            La descarga de Audio (MP3) requiere FFmpeg.<br>
+            La descarga de Video puede estar limitada a 720p.
+        </div>
+        {% endif %}
+    </div>
+</body>
+
+</html>

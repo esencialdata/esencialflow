@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
     "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-big-calendar": "^1.16.2",
     "axios": "^1.11.0",

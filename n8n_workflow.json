@@ -1,0 +1,197 @@
+{
+    "name": "Esencial Focus - Hybrid Brain Capture",
+    "nodes": [
+        {
+            "parameters": {
+                "updates": [
+                    "message"
+                ],
+                "additionalFields": {}
+            },
+            "id": "telegram-trigger",
+            "name": "Telegram Trigger",
+            "type": "n8n-nodes-base.telegramTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "model": "text-embedding-3-small",
+                "text": "={{ $json.message.text }}"
+            },
+            "id": "get-embedding",
+            "name": "Get Embedding",
+            "type": "n8n-nodes-base.openAi",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "YOUR_OPENAI_CREDENTIAL_ID",
+                    "name": "OpenAI Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://vqvfdqtzrnhsfeafwrua.supabase.co/rest/v1/rpc/match_strategy_vectors",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "supabaseApi",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "YOUR_SUPABASE_ANON_KEY"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "query_embedding",
+                            "value": "={{ $json.embedding }}"
+                        },
+                        {
+                            "name": "match_threshold",
+                            "value": 0.7
+                        },
+                        {
+                            "name": "match_count",
+                            "value": 3
+                        }
+                    ]
+                }
+            },
+            "id": "query-strategy",
+            "name": "Consult Hybrid Brain",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "model": "gpt-4o",
+                "messages": {
+                    "values": [
+                        {
+                            "role": "system",
+                            "content": "Eres el Guardián de la Ejecución de Esencial Focus.\n\nCONTEXTO ESTRATÉGICO RECUPERADO:\n{{ $node[\"Consult Hybrid Brain\"].json.map(i => i.content).join(\"\\n---\\n\") }}\n\nTu misión: Analizar el input del usuario, contrastarlo con la Estrategia arriba citada, y crear una tarea ejecutiva.\nOutput JSON:\n{\n  \"title\": \"Título de acción\",\n  \"description\": \"Contexto + Alineación Estratégica\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": \"YYYY-MM-DD\",\n  \"listId\": \"inbox\"\n}"
+                        },
+                        {
+                            "content": "={{ $('Telegram Trigger').item.json.message.text }}"
+                        }
+                    ]
+                },
+                "jsonOutput": true
+            },
+            "id": "ai-agent",
+            "name": "AI Executive Decision",
+            "type": "n8n-nodes-base.openAi",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "create",
+                "projectId": "YOUR_FIREBASE_PROJECT_ID",
+                "collection": "cards",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "title",
+                            "fieldValue": "={{ $json.title }}"
+                        },
+                        {
+                            "fieldId": "description",
+                            "fieldValue": "={{ $json.description }}"
+                        },
+                        {
+                            "fieldId": "priority",
+                            "fieldValue": "={{ $json.priority }}"
+                        },
+                        {
+                            "fieldId": "dueDate",
+                            "fieldValue": "={{ $json.dueDate }}"
+                        },
+                        {
+                            "fieldId": "createdAt",
+                            "fieldValue": "={{ new Date().toISOString() }}"
+                        },
+                        {
+                            "fieldId": "status",
+                            "fieldValue": "todo"
+                        }
+                    ]
+                }
+            },
+            "id": "firebase-writer",
+            "name": "Firebase Writer",
+            "type": "n8n-nodes-base.firestore",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Telegram Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Get Embedding",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Embedding": {
+            "main": [
+                [
+                    {
+                        "node": "Consult Hybrid Brain",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Consult Hybrid Brain": {
+            "main": [
+                [
+                    {
+                        "node": "AI Executive Decision",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Executive Decision": {
+            "main": [
+                [
+                    {
+                        "node": "Firebase Writer",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
