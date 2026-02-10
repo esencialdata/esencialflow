@@ -1,0 +1,245 @@
+{
+    "name": "Esencial Focus - Strategy Ingestion (Feed the Brain)",
+    "nodes": [
+        {
+            "parameters": {
+                "updates": [
+                    "message"
+                ],
+                "additionalFields": {}
+            },
+            "id": "telegram-trigger",
+            "name": "Telegram Trigger (File)",
+            "type": "n8n-nodes-base.telegramTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "webhookId": "telegram-ingest-webhook",
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.message.document ? true : false }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "check-document",
+            "name": "Es Documento?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                200,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "resource": "file",
+                "fileId": "={{ $('Telegram Trigger (File)').item.json.message.document.file_id }}",
+                "additionalFields": {}
+            },
+            "id": "download-file",
+            "name": "Descargar Documento",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                400,
+                0
+            ],
+            "operation": "getFile",
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "dataType": "binary",
+                "options": {}
+            },
+            "id": "extract-text",
+            "name": "Extraer Texto (Loader)",
+            "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+            "typeVersion": 1,
+            "position": [
+                600,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "chunkSize": 500,
+                "chunkOverlap": 50
+            },
+            "id": "split-text",
+            "name": "Dividir en Chunks",
+            "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+            "typeVersion": 1,
+            "position": [
+                600,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "modelName": "models/text-embedding-004",
+                "options": {}
+            },
+            "id": "gemini-embeddings",
+            "name": "Gemini Embeddings",
+            "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                800,
+                200
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "name": "Google Gemini Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "insert",
+                "tableName": {
+                    "__rl": true,
+                    "value": "strategy_vectors",
+                    "mode": "id"
+                },
+                "options": {}
+            },
+            "id": "supabase-store",
+            "name": "Guardar en Supabase",
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "typeVersion": 1,
+            "position": [
+                800,
+                0
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+                    "name": "Supabase Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Telegram Trigger (File)').item.json.message.chat.id }}",
+                "text": "🧠 *Conocimiento Ingestado*\nSe han guardado nuevos fragmentos en la memoria estratégica.",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "confirm-ingest",
+            "name": "Confirmar Ingesta",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                1000,
+                0
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Telegram Trigger (File)": {
+            "main": [
+                [
+                    {
+                        "node": "Es Documento?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Es Documento?": {
+            "main": [
+                [
+                    {
+                        "node": "Descargar Documento",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Descargar Documento": {
+            "main": [
+                [
+                    {
+                        "node": "Extraer Texto (Loader)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extraer Texto (Loader)": {
+            "main": [
+                [
+                    {
+                        "node": "Guardar en Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Dividir en Chunks": {
+            "ai_textSplitter": [
+                [
+                    {
+                        "node": "Extraer Texto (Loader)",
+                        "type": "ai_textSplitter",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Guardar en Supabase",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Guardar en Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "Confirmar Ingesta",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
