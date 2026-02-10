@@ -1,5 +1,5 @@
 {
-    "name": "Esencial Focus - Full Gemini Capture",
+    "name": "Esencial Focus - Final Hybrid Capture (Fixed)",
     "nodes": [
         {
             "parameters": {
@@ -13,13 +13,13 @@
             "type": "n8n-nodes-base.telegramTrigger",
             "typeVersion": 1,
             "position": [
-                250,
+                0,
                 300
             ],
             "webhookId": "telegram-webhook",
             "credentials": {
                 "telegramApi": {
-                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "id": "aPpjHzQm8lZbXspM",
                     "name": "Telegram Account"
                 }
             }
@@ -40,7 +40,7 @@
             "type": "n8n-nodes-base.if",
             "typeVersion": 1,
             "position": [
-                450,
+                200,
                 300
             ]
         },
@@ -55,13 +55,13 @@
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                650,
+                400,
                 200
             ],
             "operation": "getFile",
             "credentials": {
                 "telegramApi": {
-                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "id": "aPpjHzQm8lZbXspM",
                     "name": "Telegram Account"
                 }
             }
@@ -76,7 +76,7 @@
                     "mode": "list",
                     "cachedResultName": "models/gemini-1.5-flash"
                 },
-                "text": "Transcribe este audio textualmente.",
+                "text": "Transcribe este audio textualmente. No añadas explicaciones, solo el texto.",
                 "inputType": "binary",
                 "options": {}
             },
@@ -85,12 +85,12 @@
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                850,
+                600,
                 200
             ],
             "credentials": {
                 "googlePalmApi": {
-                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "id": "xDoWmcLjo7a5M06Q",
                     "name": "Google Gemini Account"
                 }
             }
@@ -100,65 +100,46 @@
                 "modelName": "models/text-embedding-004",
                 "options": {}
             },
-            "id": "get-embedding",
-            "name": "Embed Input (Gemini)",
+            "id": "gemini-embeddings-model",
+            "name": "Gemini Embeddings Model",
             "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
             "typeVersion": 1,
             "position": [
-                1100,
-                300
+                800,
+                500
             ],
             "credentials": {
                 "googlePalmApi": {
-                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "id": "xDoWmcLjo7a5M06Q",
                     "name": "Google Gemini Account"
                 }
             }
         },
         {
             "parameters": {
-                "method": "POST",
-                "url": "https://vqvfdqtzrnhsfeafwrua.supabase.co/rest/v1/rpc/match_strategy_vectors",
-                "authentication": "predefinedCredentialType",
-                "nodeCredentialType": "supabaseApi",
-                "sendHeaders": true,
-                "headerParameters": {
-                    "parameters": [
-                        {
-                            "name": "apikey",
-                            "value": "YOUR_SUPABASE_ANON_KEY"
-                        }
-                    ]
+                "mode": "load",
+                "tableName": {
+                    "__rl": true,
+                    "value": "strategy_vectors",
+                    "mode": "id"
                 },
-                "sendBody": true,
-                "bodyParameters": {
-                    "parameters": [
-                        {
-                            "name": "query_embedding",
-                            "value": "={{ $json.embedding }}"
-                        },
-                        {
-                            "name": "match_threshold",
-                            "value": 0.5
-                        },
-                        {
-                            "name": "match_count",
-                            "value": 3
-                        }
-                    ]
+                "prompt": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}",
+                "keyword": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}",
+                "options": {
+                    "matchCount": 3
                 }
             },
-            "id": "query-strategy",
-            "name": "Consultar Estrategia (Supabase)",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.1,
+            "id": "supabase-retriever",
+            "name": "Recuperar Contexto (Supabase)",
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "typeVersion": 1,
             "position": [
-                1300,
+                800,
                 300
             ],
             "credentials": {
                 "supabaseApi": {
-                    "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+                    "id": "IEwBT6HdTXWBU4KU",
                     "name": "Supabase Account"
                 }
             }
@@ -175,11 +156,11 @@
                     "values": [
                         {
                             "role": "system",
-                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (De Base de Datos):\n{{ $node[\"Consultar Estrategia (Supabase)\"].json.map(i => i.content).join(\"\\n---\\n\") }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO.\n\nFORMATO JSON ESPERADO:\n{\n  \"title\": \"Verbo + Objeto (e.g. 'Lanzar campaña X')\",\n  \"description\": \"Detalles + Alineación estratégica. Si viene de audio, resume los puntos clave.\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
+                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.pageContent }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
                         },
                         {
                             "role": "user",
-                            "content": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}"
+                            "content": "={{ $('Recuperar Contexto (Supabase)').item.json.pageContent ? \"Entrada Original: \" + ($('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text) : \"Entrada: \" + ($('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text) }}"
                         }
                     ]
                 },
@@ -190,31 +171,28 @@
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                1550,
+                1100,
                 300
             ],
             "credentials": {
                 "googlePalmApi": {
-                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "id": "xDoWmcLjo7a5M06Q",
                     "name": "Google Gemini Account"
                 }
             }
         },
         {
             "parameters": {
-                "options": {}
+                "jsCode": "const text = $input.item.json.text || '';\nconst jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();\ntry {\n  return JSON.parse(jsonString);\n} catch (e) {\n  return { title: \"Error parsing AI response\", description: text, priority: \"medium\" };\n}"
             },
             "id": "parse-json",
             "name": "Parsear JSON",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1750,
+                1350,
                 300
-            ],
-            "parameters": {
-                "jsCode": "const jsonString = $input.item.json.text.replace(/```json/g, '').replace(/```/g, '').trim();\nreturn JSON.parse(jsonString);"
-            }
+            ]
         },
         {
             "parameters": {
@@ -259,7 +237,7 @@
             "type": "n8n-nodes-base.firestore",
             "typeVersion": 1,
             "position": [
-                1950,
+                1550,
                 300
             ],
             "credentials": {
@@ -282,12 +260,12 @@
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                2150,
+                1750,
                 300
             ],
             "credentials": {
                 "telegramApi": {
-                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "id": "aPpjHzQm8lZbXspM",
                     "name": "Telegram Account"
                 }
             }
@@ -316,7 +294,7 @@
                 ],
                 [
                     {
-                        "node": "Embed Input (Gemini)",
+                        "node": "Recuperar Contexto (Supabase)",
                         "type": "main",
                         "index": 0
                     }
@@ -338,25 +316,25 @@
             "main": [
                 [
                     {
-                        "node": "Embed Input (Gemini)",
+                        "node": "Recuperar Contexto (Supabase)",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Embed Input (Gemini)": {
-            "main": [
+        "Gemini Embeddings Model": {
+            "ai_embedding": [
                 [
                     {
-                        "node": "Consultar Estrategia (Supabase)",
-                        "type": "main",
+                        "node": "Recuperar Contexto (Supabase)",
+                        "type": "ai_embedding",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Consultar Estrategia (Supabase)": {
+        "Recuperar Contexto (Supabase)": {
             "main": [
                 [
                     {
