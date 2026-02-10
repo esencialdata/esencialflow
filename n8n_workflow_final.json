@@ -222,6 +222,7 @@
         },
         {
             "parameters": {
+                "operation": "create",
                 "projectId": "YOUR_FIREBASE_PROJECT_ID",
                 "collection": "cards",
                 "columns": {
