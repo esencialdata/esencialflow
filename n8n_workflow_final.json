@@ -247,14 +247,14 @@
             },
             "id": "firebase-writer",
             "name": "Crear Tarea en Firebase",
-            "type": "n8n-nodes-base.firestore",
+            "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
             "typeVersion": 1,
             "position": [
                 1750,
                 300
             ],
             "credentials": {
-                "firebaseFirebaseApi": {
+                "googleFirebaseCloudFirestoreOAuth2Api": {
                     "id": "YOUR_FIREBASE_CREDENTIAL_ID",
                     "name": "Firebase Account"
                 }

@@ -1,6 +1,10 @@
 -- Enable the pgvector extension to work with embedding vectors
 create extension if not exists vector;
 
+-- ⚠️ IMPORTANT: Drop existing table/function to enforce 768 dimensions (Gemini)
+drop table if exists strategy_vectors;
+drop function if exists match_strategy_vectors;
+
 -- Create a table to store your documents
 create table strategy_vectors (
   id bigserial primary key,
