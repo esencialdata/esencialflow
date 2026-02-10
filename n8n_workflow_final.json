@@ -1,5 +1,5 @@
 {
-    "name": "Esencial Focus - Final Hybrid Capture (Fixed)",
+    "name": "Esencial Focus - Final Hybrid Capture (Agregated)",
     "nodes": [
         {
             "parameters": {
@@ -146,6 +146,19 @@
         },
         {
             "parameters": {
+                "jsCode": "const context = items.map(i => i.json.pageContent).join('\\n---\\n') || \"No se encontró contexto estratégico.\";\n\nconst voice = $('Es Nota de Voz?').first().json.message.voice;\nconst input = voice ? $('Transcribir Audio (Gemini)').first().json.text : $('Telegram Trigger').first().json.message.text;\n\nreturn [{ json: { context, input } }];"
+            },
+            "id": "aggregate-context",
+            "name": "Unificar Contexto",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1050,
+                300
+            ]
+        },
+        {
+            "parameters": {
                 "modelId": {
                     "__rl": true,
                     "value": "models/gemini-1.5-pro",
@@ -156,11 +169,11 @@
                     "values": [
                         {
                             "role": "system",
-                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.pageContent }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
+                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.context }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
                         },
                         {
                             "role": "user",
-                            "content": "={{ $('Recuperar Contexto (Supabase)').item.json.pageContent ? \"Entrada Original: \" + ($('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text) : \"Entrada: \" + ($('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text) }}"
+                            "content": "={{ $json.input }}"
                         }
                     ]
                 },
@@ -171,7 +184,7 @@
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                1100,
+                1300,
                 300
             ],
             "credentials": {
@@ -190,7 +203,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1350,
+                1550,
                 300
             ]
         },
@@ -237,7 +250,7 @@
             "type": "n8n-nodes-base.firestore",
             "typeVersion": 1,
             "position": [
-                1550,
+                1750,
                 300
             ],
             "credentials": {
@@ -260,7 +273,7 @@
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                1750,
+                1950,
                 300
             ],
             "credentials": {
@@ -335,6 +348,17 @@
             ]
         },
         "Recuperar Contexto (Supabase)": {
+            "main": [
+                [
+                    {
+                        "node": "Unificar Contexto",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Unificar Contexto": {
             "main": [
                 [
                     {
