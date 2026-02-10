@@ -209,41 +209,23 @@
         },
         {
             "parameters": {
-                "operation": "create",
                 "projectId": "YOUR_FIREBASE_PROJECT_ID",
                 "collection": "cards",
-                "fieldsUi": {
-                    "fieldValues": [
-                        {
-                            "fieldId": "title",
-                            "fieldValue": "={{ $json.title }}"
-                        },
-                        {
-                            "fieldId": "description",
-                            "fieldValue": "={{ $json.description }}"
-                        },
-                        {
-                            "fieldId": "priority",
-                            "fieldValue": "={{ $json.priority }}"
-                        },
-                        {
-                            "fieldId": "dueDate",
-                            "fieldValue": "={{ $json.dueDate }}"
-                        },
-                        {
-                            "fieldId": "createdAt",
-                            "fieldValue": "={{ new Date().toISOString() }}"
-                        },
-                        {
-                            "fieldId": "status",
-                            "fieldValue": "todo"
-                        },
-                        {
-                            "fieldId": "listId",
-                            "fieldValue": "inbox"
-                        }
-                    ]
-                }
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "title": "={{ $json.title }}",
+                        "description": "={{ $json.description }}",
+                        "priority": "={{ $json.priority }}",
+                        "dueDate": "={{ $json.dueDate }}",
+                        "createdAt": "={{ new Date().toISOString() }}",
+                        "status": "todo",
+                        "listId": "inbox"
+                    },
+                    "matchingColumns": [],
+                    "schema": []
+                },
+                "options": {}
             },
             "id": "firebase-writer",
             "name": "Crear Tarea en Firebase",
