@@ -110,7 +110,7 @@
         },
         {
             "parameters": {
-                "modelName": "models/text-embedding-004",
+                "modelName": "models/embedding-001",
                 "options": {}
             },
             "id": "gemini-embeddings-model",
