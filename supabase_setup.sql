@@ -6,12 +6,12 @@ create table strategy_vectors (
   id bigserial primary key,
   content text, -- The text content of the chunk
   metadata jsonb, -- Metadata (source, page, date, etc.)
-  embedding vector(1536) -- OpenAI embedding vector (1536 dimensions)
+  embedding vector(768) -- Gemini embedding vector (768 dimensions)
 );
 
 -- Create a function to search for documents
 create or replace function match_strategy_vectors (
-  query_embedding vector(1536),
+  query_embedding vector(768),
   match_threshold float,
   match_count int
 )

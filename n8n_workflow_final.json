@@ -1,0 +1,404 @@
+{
+    "name": "Esencial Focus - Full Gemini Capture",
+    "nodes": [
+        {
+            "parameters": {
+                "updates": [
+                    "message"
+                ],
+                "additionalFields": {}
+            },
+            "id": "telegram-trigger",
+            "name": "Telegram Trigger",
+            "type": "n8n-nodes-base.telegramTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "telegram-webhook",
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.message.voice ? true : false }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "check-voice",
+            "name": "Es Nota de Voz?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "resource": "file",
+                "fileId": "={{ $('Telegram Trigger').item.json.message.voice.file_id }}",
+                "additionalFields": {}
+            },
+            "id": "download-audio",
+            "name": "Descargar Audio",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                650,
+                200
+            ],
+            "operation": "getFile",
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "resource": "audio",
+                "operation": "analyze",
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-1.5-flash",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-1.5-flash"
+                },
+                "text": "Transcribe este audio textualmente.",
+                "inputType": "binary",
+                "options": {}
+            },
+            "id": "transcribe-audio",
+            "name": "Transcribir Audio (Gemini)",
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1.1,
+            "position": [
+                850,
+                200
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "name": "Google Gemini Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "modelName": "models/text-embedding-004",
+                "options": {}
+            },
+            "id": "get-embedding",
+            "name": "Embed Input (Gemini)",
+            "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                300
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "name": "Google Gemini Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://vqvfdqtzrnhsfeafwrua.supabase.co/rest/v1/rpc/match_strategy_vectors",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "supabaseApi",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "YOUR_SUPABASE_ANON_KEY"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "query_embedding",
+                            "value": "={{ $json.embedding }}"
+                        },
+                        {
+                            "name": "match_threshold",
+                            "value": 0.5
+                        },
+                        {
+                            "name": "match_count",
+                            "value": 3
+                        }
+                    ]
+                }
+            },
+            "id": "query-strategy",
+            "name": "Consultar Estrategia (Supabase)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                1300,
+                300
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+                    "name": "Supabase Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-1.5-pro",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-1.5-pro"
+                },
+                "messages": {
+                    "values": [
+                        {
+                            "role": "system",
+                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (De Base de Datos):\n{{ $node[\"Consultar Estrategia (Supabase)\"].json.map(i => i.content).join(\"\\n---\\n\") }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO.\n\nFORMATO JSON ESPERADO:\n{\n  \"title\": \"Verbo + Objeto (e.g. 'Lanzar campaña X')\",\n  \"description\": \"Detalles + Alineación estratégica. Si viene de audio, resume los puntos clave.\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
+                        },
+                        {
+                            "role": "user",
+                            "content": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "ai-agent",
+            "name": "Agente Ejecutivo (Gemini)",
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1.1,
+            "position": [
+                1550,
+                300
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "YOUR_GOOGLE_GEMINI_CREDENTIAL_ID",
+                    "name": "Google Gemini Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "id": "parse-json",
+            "name": "Parsear JSON",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1750,
+                300
+            ],
+            "parameters": {
+                "jsCode": "const jsonString = $input.item.json.text.replace(/```json/g, '').replace(/```/g, '').trim();\nreturn JSON.parse(jsonString);"
+            }
+        },
+        {
+            "parameters": {
+                "operation": "create",
+                "projectId": "YOUR_FIREBASE_PROJECT_ID",
+                "collection": "cards",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "title",
+                            "fieldValue": "={{ $json.title }}"
+                        },
+                        {
+                            "fieldId": "description",
+                            "fieldValue": "={{ $json.description }}"
+                        },
+                        {
+                            "fieldId": "priority",
+                            "fieldValue": "={{ $json.priority }}"
+                        },
+                        {
+                            "fieldId": "dueDate",
+                            "fieldValue": "={{ $json.dueDate }}"
+                        },
+                        {
+                            "fieldId": "createdAt",
+                            "fieldValue": "={{ new Date().toISOString() }}"
+                        },
+                        {
+                            "fieldId": "status",
+                            "fieldValue": "todo"
+                        },
+                        {
+                            "fieldId": "listId",
+                            "fieldValue": "inbox"
+                        }
+                    ]
+                }
+            },
+            "id": "firebase-writer",
+            "name": "Crear Tarea en Firebase",
+            "type": "n8n-nodes-base.firestore",
+            "typeVersion": 1,
+            "position": [
+                1950,
+                300
+            ],
+            "credentials": {
+                "firebaseFirebaseApi": {
+                    "id": "YOUR_FIREBASE_CREDENTIAL_ID",
+                    "name": "Firebase Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+                "text": "=✅ *Tarea Creada*: {{ $('Parsear JSON').item.json.title }}\n🎯 *Prioridad*: {{ $('Parsear JSON').item.json.priority }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "confirm-telegram",
+            "name": "Confirmar Creación",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                2150,
+                300
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Telegram Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Es Nota de Voz?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Es Nota de Voz?": {
+            "main": [
+                [
+                    {
+                        "node": "Descargar Audio",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Embed Input (Gemini)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Descargar Audio": {
+            "main": [
+                [
+                    {
+                        "node": "Transcribir Audio (Gemini)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Transcribir Audio (Gemini)": {
+            "main": [
+                [
+                    {
+                        "node": "Embed Input (Gemini)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Embed Input (Gemini)": {
+            "main": [
+                [
+                    {
+                        "node": "Consultar Estrategia (Supabase)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Consultar Estrategia (Supabase)": {
+            "main": [
+                [
+                    {
+                        "node": "Agente Ejecutivo (Gemini)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Agente Ejecutivo (Gemini)": {
+            "main": [
+                [
+                    {
+                        "node": "Parsear JSON",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parsear JSON": {
+            "main": [
+                [
+                    {
+                        "node": "Crear Tarea en Firebase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Crear Tarea en Firebase": {
+            "main": [
+                [
+                    {
+                        "node": "Confirmar Creación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
