@@ -1,5 +1,5 @@
 {
-    "name": "Esencial Focus - Final Hybrid Capture (Agregated)",
+    "name": "Esencial Focus - Final Hybrid Capture (Normalized)",
     "nodes": [
         {
             "parameters": {
@@ -76,7 +76,7 @@
                     "mode": "list",
                     "cachedResultName": "models/gemini-1.5-flash"
                 },
-                "text": "Transcribe este audio textualmente. No añadas explicaciones, solo el texto.",
+                "text": "Transcribe este audio textualmente.",
                 "inputType": "binary",
                 "options": {}
             },
@@ -97,6 +97,19 @@
         },
         {
             "parameters": {
+                "jsCode": "// Normaliza la entrada (Texto o Transcripción) a un solo campo 'text'\nconst message = $input.item.json.message;\nconst voiceText = $input.item.json.text;\n\n// Si viene de Transcripción (tiene propiedad text y NO message)\nif (voiceText && !message) {\n  return { json: { text: voiceText } };\n}\n\n// Si viene de Telegram directo (Text)\nif (message && message.text) {\n  return { json: { text: message.text } };\n}\n\nreturn { json: { text: \"\" } };"
+            },
+            "id": "normalize-input",
+            "name": "Normalizar Entrada",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                800,
+                300
+            ]
+        },
+        {
+            "parameters": {
                 "modelName": "models/text-embedding-004",
                 "options": {}
             },
@@ -105,7 +118,7 @@
             "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
             "typeVersion": 1,
             "position": [
-                800,
+                1000,
                 500
             ],
             "credentials": {
@@ -123,8 +136,8 @@
                     "value": "strategy_vectors",
                     "mode": "id"
                 },
-                "prompt": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}",
-                "keyword": "={{ $('Es Nota de Voz?').item.json.message.voice ? $('Transcribir Audio (Gemini)').item.json.text : $('Telegram Trigger').item.json.message.text }}",
+                "prompt": "={{ $json.text }}",
+                "keyword": "={{ $json.text }}",
                 "options": {
                     "matchCount": 3
                 }
@@ -134,7 +147,7 @@
             "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
             "typeVersion": 1,
             "position": [
-                800,
+                1000,
                 300
             ],
             "credentials": {
@@ -146,14 +159,14 @@
         },
         {
             "parameters": {
-                "jsCode": "const context = items.map(i => i.json.pageContent).join('\\n---\\n') || \"No se encontró contexto estratégico.\";\n\nconst voice = $('Es Nota de Voz?').first().json.message.voice;\nconst input = voice ? $('Transcribir Audio (Gemini)').first().json.text : $('Telegram Trigger').first().json.message.text;\n\nreturn [{ json: { context, input } }];"
+                "jsCode": "// Agrega el contexto en un solo bloque\nconst context = items.map(i => i.json.pageContent).join('\\n---\\n') || \"No se encontró contexto estratégico.\";\n\n// Recuperamos el input original del nodo anterior (Normalizar Entrada)\n// Como 'Recuperar Contexto' puede devolver varios items, necesitamos acceder a los datos del padre.\n// En n8n, $node[\"Normalizar Entrada\"].json... nos da el item original.\n\nconst input = $('Normalizar Entrada').first().json.text;\n\nreturn [{ json: { context, input } }];"
             },
             "id": "aggregate-context",
             "name": "Unificar Contexto",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1050,
+                1250,
                 300
             ]
         },
@@ -184,7 +197,7 @@
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                1300,
+                1500,
                 300
             ],
             "credentials": {
@@ -203,7 +216,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1550,
+                1750,
                 300
             ]
         },
@@ -232,7 +245,7 @@
             "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
             "typeVersion": 1,
             "position": [
-                1750,
+                1950,
                 300
             ],
             "credentials": {
@@ -255,7 +268,7 @@
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                1950,
+                2150,
                 300
             ],
             "credentials": {
@@ -289,7 +302,7 @@
                 ],
                 [
                     {
-                        "node": "Recuperar Contexto (Supabase)",
+                        "node": "Normalizar Entrada",
                         "type": "main",
                         "index": 0
                     }
@@ -308,6 +321,17 @@
             ]
         },
         "Transcribir Audio (Gemini)": {
+            "main": [
+                [
+                    {
+                        "node": "Normalizar Entrada",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalizar Entrada": {
             "main": [
                 [
                     {
