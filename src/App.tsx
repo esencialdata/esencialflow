@@ -14,8 +14,7 @@ import { useToast } from './context/ToastContext';
 import { api } from './config/http';
 import { API_URL } from './config/api';
 import { auth } from './config/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { generateColorFromId, getUserInitials } from './utils/user';
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
 
 function App() {
   const [authStateChecked, setAuthStateChecked] = useState(false);
