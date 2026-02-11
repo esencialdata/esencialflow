@@ -144,6 +144,7 @@
             },
             "id": "supabase-retriever",
             "name": "Recuperar Contexto (Supabase)",
+            "alwaysOutputData": true,
             "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
             "typeVersion": 1,
             "position": [
