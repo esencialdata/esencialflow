@@ -97,7 +97,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// Normaliza la entrada (Texto o Transcripción) a un solo campo 'text'\nconst message = $input.item.json.message;\nconst voiceText = $input.item.json.text;\n\n// Si viene de Transcripción (tiene propiedad text y NO message)\nif (voiceText && !message) {\n  return { json: { text: voiceText } };\n}\n\n// Si viene de Telegram directo (Text)\nif (message && message.text) {\n  return { json: { text: message.text } };\n}\n\nreturn { json: { text: \"\" } };"
+                "jsCode": "// Normaliza la entrada (Texto o Transcripción) a un solo campo 'text'\nconst json = $input.item.json;\n// Busca el texto en varias propiedades posibles (Gemini a veces usa 'output' o 'content')\nconst text = json.text || json.output || json.content || (json.message && json.message.text);\n\nif (text && typeof text === 'string' && text.trim().length > 0) {\n  return { json: { text: text } };\n}\n\n// Si no hay texto, evita enviar vac\u00edo para que no falle el embedding\nreturn { json: { text: \"[Audio ininteligible o sin texto]\" } };"
             },
             "id": "normalize-input",
             "name": "Normalizar Entrada",
