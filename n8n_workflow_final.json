@@ -182,12 +182,8 @@
                 "messages": {
                     "values": [
                         {
-                            "role": "system",
-                            "content": "Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.context }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}"
-                        },
-                        {
                             "role": "user",
-                            "content": "={{ $json.input }}"
+                            "content": "=Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.context }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}\n\nENTRADA DEL USUARIO:\n{{ $json.input }}"
                         }
                     ]
                 },
