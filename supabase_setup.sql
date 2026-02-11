@@ -19,8 +19,8 @@ create table strategy_vectors (
 -- ⚠️ Added 'filter' parameter to match LangChain signature
 create or replace function match_documents (
   query_embedding vector(768),
-  match_threshold float,
-  match_count int,
+  match_threshold float DEFAULT 0.1,
+  match_count int DEFAULT 3,
   filter jsonb DEFAULT '{}'
 )
 returns table (
