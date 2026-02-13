@@ -1,3 +1,6 @@
+import React, { useState, useMemo } from 'react';
+import { useCards } from '../hooks/useSupabaseCards';
+import { Card } from '../types/data';
 import { usePomodoro } from '../context/PomodoroContext';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
