@@ -59,7 +59,7 @@ function App() {
 
   // Hooks
   const { currentBoardId } = useBoards(firebaseUser?.uid);
-  const { fetchCards: reloadCards } = useCards(currentBoardId);
+  const { fetchCards: reloadCards, handleUpdateCard: updateCardSupabase } = useCards(currentBoardId);
   const pomodoro = usePomodoro();
   const { showToast } = useToast();
 
@@ -67,6 +67,7 @@ function App() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   useEffect(() => {
     if (firebaseUser) {
+      // Users still fetched from API for now (or could be moved to Supabase later)
       api.get<User[]>(`${API_URL}/users`).then(res => {
         setAllUsers(Array.isArray(res.data) ? res.data : []);
       }).catch(console.error);
@@ -84,14 +85,14 @@ function App() {
     setEditingCard(card);
   };
 
-  const handleUpdateCard = async (updatedCard: Card) => {
+  const onUpdateCardSubmit = async (updatedCard: Card) => {
     try {
-      await api.put(`${API_URL}/cards/${updatedCard.id}`, updatedCard);
+      // Use Supabase Hook directly
+      await updateCardSupabase(updatedCard.id, updatedCard);
+
       try { window.dispatchEvent(new CustomEvent('card:updated', { detail: updatedCard })); } catch { }
       setEditingCard(null);
-      if (currentBoardId) {
-        reloadCards(currentBoardId);
-      }
+
       showToast('Tarjeta actualizada', 'success');
     } catch (error) {
       console.error("Error updating card:", error);
@@ -172,7 +173,7 @@ function App() {
         card={editingCard}
         users={allUsers}
         onClose={() => setEditingCard(null)}
-        onSubmit={handleUpdateCard}
+        onSubmit={onUpdateCardSubmit}
       />
 
       <FocusWidget onOpen={() => focusCard ? null : setFocusCard(pomodoro.activeCard as Card)} />

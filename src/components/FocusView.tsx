@@ -5,8 +5,9 @@ import { Card } from '../types/data';
 import ActiveTimerOverlay from './ActiveTimerOverlay';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
-import { api } from '../config/http';
-import { API_URL } from '../config/api';
+import ActiveTimerOverlay from './ActiveTimerOverlay';
+import LoadingOverlay from './LoadingOverlay';
+import QueueModal from './QueueModal';
 
 interface FocusViewProps {
     boardId: string | null;
@@ -15,7 +16,7 @@ interface FocusViewProps {
 }
 
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
-    const { cards, isLoading, error, fetchCards } = useCards(boardId);
+    const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
     // const { isRunning, activeCard } = usePomodoro(); // Not used directly here anymore, handled by Overlay
     const [queueOpen, setQueueOpen] = useState(false);
 
@@ -56,8 +57,9 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
     const handleToggleComplete = async (card: Card) => {
         try {
-            await api.put(`${API_URL}/cards/${card.id}`, { ...card, completed: !card.completed });
-            if (boardId) fetchCards(boardId);
+            await handleUpdateCard(card.id, { completed: !card.completed });
+            // fetchCards is handled by subscription in the hook, but we can force it if needed. 
+            // The hook's updateCard doesn't return data, so we rely on subscription or manual fetch if we want instant local update (though hook state updates optimistically or via sub)
         } catch (e) {
             console.error('Failed to toggle complete', e);
         }
