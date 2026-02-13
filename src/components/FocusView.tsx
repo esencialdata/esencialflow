@@ -1,9 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { useCards } from '../hooks/useSupabaseCards';
-import { Card } from '../types/data';
-
-
-import ActiveTimerOverlay from './ActiveTimerOverlay';
+import { usePomodoro } from '../context/PomodoroContext';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
 
@@ -15,7 +10,7 @@ interface FocusViewProps {
 
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
     const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
-    // const { isRunning, activeCard } = usePomodoro(); // Not used directly here anymore, handled by Overlay
+    const { isRunning, activeCard, mmss, pause, stop, phase } = usePomodoro();
     const [queueOpen, setQueueOpen] = useState(false);
 
     // Strict Sorting Logic
@@ -32,14 +27,10 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
             if (b.priority === 'high' && a.priority !== 'high') return 1;
 
             // 2. Due Date (Ascending: Earlier dates first)
-            // If no due date, consider it "far future" (or maybe handled last? Request implied strict "High > DueDate")
-            // Imputing no due date as MAX_SAFE_INTEGER puts them at the end.
             const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
             const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
 
-            if (dateA !== dateB) {
-                return dateA - dateB;
-            }
+            if (dateA !== dateB) return dateA - dateB;
 
             // 3. Created At (Oldest first)
             const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -56,8 +47,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     const handleToggleComplete = async (card: Card) => {
         try {
             await handleUpdateCard(card.id, { completed: !card.completed });
-            // fetchCards is handled by subscription in the hook, but we can force it if needed. 
-            // The hook's updateCard doesn't return data, so we rely on subscription or manual fetch if we want instant local update (though hook state updates optimistically or via sub)
         } catch (e) {
             console.error('Failed to toggle complete', e);
         }
@@ -66,6 +55,143 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
     if (error) return <div className="error-message">{error}</div>;
 
+    // --- TIMER VIEW (Active Session) ---
+    if (isRunning && activeCard) {
+        return (
+            <div className="focus-view-container timer-active" style={{
+                height: '100vh',
+                width: '100vw',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: '2rem',
+                boxSizing: 'border-box',
+                position: 'relative',
+                background: '#000', // Deep focus
+                color: '#fff'
+            }}>
+                {/* Visual Pulse Background */}
+                <div className="pulse-bg" />
+
+                {/* Queue Toggle (still accessible) */}
+                <button
+                    onClick={() => setQueueOpen(true)}
+                    className="queue-toggle-btn"
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    {sortedQueue.length > 1 ? `Ver Cola (${sortedQueue.length - 1})` : 'Cola'}
+                </button>
+
+                <div style={{ textAlign: 'center', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="phase-badge" style={{
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.2em',
+                        fontSize: '1rem',
+                        color: phase === 'focus' ? 'var(--color-primary)' : '#4ade80',
+                        marginBottom: '2rem'
+                    }}>
+                        {phase === 'focus' ? 'ENFOQUE TOTAL' : 'DESCANSO'}
+                    </div>
+
+                    <div className="timer-display" style={{
+                        fontSize: 'clamp(6rem, 20vw, 12rem)', // HUGE timer
+                        fontFamily: "'Outfit', monospace", // Use monospace if available or standard sans
+                        fontWeight: 200,
+                        lineHeight: 0.9,
+                        marginBottom: '2rem',
+                        fontVariantNumeric: 'tabular-nums'
+                    }}>
+                        {mmss}
+                    </div>
+
+                    <h1 style={{
+                        fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
+                        fontWeight: 600,
+                        margin: '0 0 3rem 0',
+                        maxWidth: '900px',
+                        opacity: 0.9
+                    }}>
+                        {activeCard.title}
+                    </h1>
+
+                    <div className="timer-controls" style={{ display: 'flex', gap: '2rem' }}>
+                        <button onClick={pause} className="control-btn-large pause">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                            <span>Pausar</span>
+                        </button>
+                        <button onClick={stop} className="control-btn-large stop">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                            <span>Terminar</span>
+                        </button>
+                    </div>
+                </div>
+
+                <QueueModal
+                    isOpen={queueOpen}
+                    onClose={() => setQueueOpen(false)}
+                    queue={viewableQueue}
+                    onJumpTo={(card) => { onStartFocus(card); }} // Switching focus
+                    onToggleComplete={handleToggleComplete}
+                />
+
+                <style>{`
+                    .pulse-bg {
+                        position: absolute;
+                        top: 50%; left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 100vw; height: 100vh;
+                        background: radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+                        z-index: 0;
+                        animation: gentle-pulse 4s infinite alternate;
+                        pointer-events: none;
+                    }
+                    @keyframes gentle-pulse {
+                        0% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.9); }
+                        100% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+                    }
+                    .queue-toggle-btn {
+                        position: absolute;
+                        top: 2rem; left: 2rem;
+                        background: rgba(255,255,255,0.05);
+                        border: 1px solid rgba(255,255,255,0.1);
+                        color: rgba(255,255,255,0.7);
+                        cursor: pointer;
+                        border-radius: 8px;
+                        padding: 8px 16px;
+                        font-size: 0.85rem;
+                        display: flex; alignItems: center; gap: 8px;
+                        transition: all 0.2s;
+                        z-index: 10;
+                    }
+                    .queue-toggle-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+                    .control-btn-large {
+                        background: transparent;
+                        border: 2px solid rgba(255,255,255,0.2);
+                        color: #fff;
+                        padding: 1rem 2rem;
+                        border-radius: 50px;
+                        font-size: 1.1rem;
+                        cursor: pointer;
+                        display: flex; alignItems: center; gap: 12px;
+                        transition: all 0.2s;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        font-weight: 600;
+                    }
+                    .control-btn-large:hover {
+                         border-color: #fff;
+                         background: rgba(255,255,255,0.05);
+                         transform: translateY(-2px);
+                    }
+                    .control-btn-large.pause:hover { border-color: #fbbf24; color: #fbbf24; }
+                    .control-btn-large.stop:hover { border-color: #f87171; color: #f87171; }
+                `}</style>
+            </div>
+        );
+    }
+
+    // --- STANDARD HERO VIEW ---
     return (
         <div className="focus-view-container" style={{
             height: '100vh',
@@ -78,10 +204,8 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
             boxSizing: 'border-box',
             position: 'relative'
         }}>
-            {/* 1. Active Timer Overlay */}
-            <ActiveTimerOverlay />
 
-            {/* 2. Top-Left Queue Toggle */}
+            {/* Top-Left Queue Toggle */}
             <button
                 onClick={() => setQueueOpen(true)}
                 style={{
@@ -105,13 +229,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                 {sortedQueue.length > 1 ? `Ver Cola (${sortedQueue.length - 1} más)` : 'Ver Cola'}
             </button>
 
-            {/* 3. Hero Section */}
+            {/* Hero Section */}
             {heroCard ? (
                 <div className="hero-card" style={{
                     textAlign: 'center',
                     maxWidth: '800px',
                     animation: 'fadeInUp 0.5s ease-out',
-                    zIndex: 1 // Ensure it's above background but below overlays
+                    zIndex: 1
                 }}>
                     <div style={{ marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.9rem', color: 'var(--color-primary)' }}>
                         TAREA #1
