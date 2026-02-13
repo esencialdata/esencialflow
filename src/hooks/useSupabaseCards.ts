@@ -33,11 +33,11 @@ const mapToSupabase = (card: Partial<Card>): any => {
   if (card.listId !== undefined) payload.list_id = card.listId;
   if (card.priority !== undefined) payload.priority = card.priority;
   if (card.position !== undefined) payload.position = card.position;
-  if (card.dueDate !== undefined) payload.due_date = card.dueDate instanceof Date ? card.dueDate.toISOString() : card.dueDate;
+  if (card.dueDate !== undefined) payload.due_date = toSupabaseDate(card.dueDate);
   if (card.completed !== undefined) payload.completed = card.completed;
-  if (card.completedAt !== undefined) payload.completed_at = card.completedAt instanceof Date ? card.completedAt.toISOString() : card.completedAt;
+  if (card.completedAt !== undefined) payload.completed_at = toSupabaseDate(card.completedAt);
   if (card.archived !== undefined) payload.archived = card.archived;
-  if (card.archivedAt !== undefined) payload.archived_at = card.archivedAt instanceof Date ? card.archivedAt.toISOString() : card.archivedAt;
+  if (card.archivedAt !== undefined) payload.archived_at = toSupabaseDate(card.archivedAt);
   if (card.assignedToUserId !== undefined) payload.assigned_to_user_id = card.assignedToUserId;
   if (card.estimatedTime !== undefined) payload.estimated_time = card.estimatedTime;
   if (card.actualTime !== undefined) payload.actual_time = card.actualTime;
@@ -46,6 +46,13 @@ const mapToSupabase = (card: Partial<Card>): any => {
   // Metadata
   payload.updated_at = new Date().toISOString();
   return payload;
+};
+
+// Helper for date sanitization
+const toSupabaseDate = (date: any) => {
+  if (!date || date === '') return null;
+  if (date instanceof Date) return date.toISOString();
+  return date;
 };
 
 export const useCards = (_boardId: string | null) => {
