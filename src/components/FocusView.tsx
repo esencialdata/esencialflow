@@ -55,6 +55,60 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         }
     };
 
+    const togglePiP = async () => {
+        if (!('documentPictureInPicture' in window)) return;
+        try {
+            const dpip = (window as any).documentPictureInPicture;
+            if (dpip.window) {
+                dpip.window.close();
+                return;
+            }
+            const win = await dpip.requestWindow({ width: 300, height: 150 });
+
+            Array.from(document.styleSheets).forEach((styleSheet) => {
+                try {
+                    if (styleSheet.href) {
+                        const link = win.document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = styleSheet.href;
+                        win.document.head.appendChild(link);
+                    }
+                } catch (e) { }
+            });
+
+            const container = win.document.createElement('div');
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.alignItems = 'center';
+            container.style.justifyContent = 'center';
+            container.style.height = '100vh';
+            container.style.background = '#000';
+            container.style.color = '#fff';
+            container.style.fontFamily = 'monospace';
+
+            const updatePiP = () => {
+                // Determine phase text
+                // Since we can't easily access the current 'phase' variable inside this interval closure without ref,
+                // we'll just show the timer and title.
+                // A full portal would be better but this is a quick implementation.
+                container.innerHTML = `
+                    <div style="font-size: 3rem; margin-bottom: 0.5rem; line-height: 1;">${document.querySelector('.timer-display')?.textContent || '--:--'}</div>
+                    <div style="font-size: 1rem; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;">${activeCard?.title || ''}</div>
+                `;
+            };
+
+            updatePiP();
+            const interval = setInterval(updatePiP, 1000);
+
+            win.document.body.append(container);
+            win.document.body.style.margin = '0';
+
+            win.addEventListener('pagehide', () => clearInterval(interval));
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
     if (error) return <div className="error-message">{error}</div>;
 
