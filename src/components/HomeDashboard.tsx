@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useLists } from '../hooks/useLists';
-import { useCards } from '../hooks/useCards';
+import { useCards } from '../hooks/useSupabaseCards';
 import './HomeDashboard.css';
 import LoadingOverlay from './LoadingOverlay';
 

@@ -4,7 +4,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import FocusView from './components/FocusView';
 import EditCardModal from './components/EditCardModal';
 import { useBoards } from './hooks/useBoards';
-import { useCards } from './hooks/useCards';
+import { useCards } from './hooks/useSupabaseCards';
 import { Card, User } from './types/data';
 import logoUrl from '../logo_esencial_w.svg';
 import FocusWidget from './components/FocusWidget';
@@ -15,6 +15,9 @@ import { api } from './config/http';
 import { API_URL } from './config/api';
 import { auth } from './config/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+
+// Debug logging
+console.log('App.tsx: Module loaded');
 
 function App() {
   const [authStateChecked, setAuthStateChecked] = useState(false);

@@ -5,7 +5,7 @@ import { Card as CardType, User } from '../types/data';
 import Card from './Card';
 import './KanbanBoard.css';
 import { useLists } from '../hooks/useLists';
-import { useCards } from '../hooks/useCards';
+import { useCards } from '../hooks/useSupabaseCards';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingOverlay from './LoadingOverlay';
 import { useToast } from '../context/ToastContext';
@@ -54,7 +54,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         el.classList.add('focused');
         const t = setTimeout(() => el.classList.remove('focused'), 1200);
         return () => clearTimeout(t);
-      } catch {}
+      } catch { }
     }
   }, [focusListId]);
 
@@ -136,210 +136,210 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <>
-    {/* Filtros fuera del contenedor flex de columnas para evitar desplazamientos/mis-drops */}
-    <div style={{ margin: '8px 12px 0 12px', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          <input
-            type="text"
-            placeholder="Buscar…"
-            value={filters?.q || ''}
-            onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), q: e.target.value })}
-            style={{ padding:'6px 8px', borderRadius:8, border:'1px solid var(--color-border)', background:'var(--color-surface-2)', color:'var(--color-text)' }}
-            ref={searchRef}
-          />
-          {users.length > 1 && (
-            <select
-              value={filters?.assignedUserId || ''}
-              onChange={(e)=> onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), assignedUserId: e.target.value })}
-            >
-              <option value="">Todos</option>
-              {users.map(u => (<option key={u.userId} value={u.userId}>{u.name}</option>))}
-            </select>
-          )}
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), assignedToMe: !filters?.assignedToMe })}
-            className="filter-chip"
-            style={{ opacity: filters?.assignedToMe ? 1 : 0.6 }}
-          >Asignadas a mí</button>
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), dueToday: !filters?.dueToday })}
-            className="filter-chip"
-            style={{ opacity: filters?.dueToday ? 1 : 0.6 }}
-          >Vencen hoy</button>
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), noDueDate: !filters?.noDueDate })}
-            className="filter-chip"
-            style={{ opacity: filters?.noDueDate ? 1 : 0.6 }}
-          >Sin fecha</button>
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), overdue: !filters?.overdue })}
-            className="filter-chip"
-            style={{ opacity: filters?.overdue ? 1 : 0.6 }}
-          >Vencidas</button>
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), hasAttachments: !filters?.hasAttachments })}
-            className="filter-chip"
-            style={{ opacity: filters?.hasAttachments ? 1 : 0.6 }}
-          >Con adjuntos</button>
-          <button
-            onClick={() => onChangeFilters && onChangeFilters({ ...(filters||{q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false}), showArchived: !filters?.showArchived })}
-            className="filter-chip"
-            style={{ opacity: filters?.showArchived ? 1 : 0.6 }}
-          >Archivadas</button>
-    </div>
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="kanban-board">
-        {lists.map((list) => (
-          <Droppable key={list.listId} droppableId={list.listId} isDropDisabled={isReadOnly}>
-            {(provided) => (
-              <div
-                className="list"
-                ref={(el) => { provided.innerRef(el); listRefs.current[list.listId] = el; }}
-                {...provided.droppableProps}
-              >
-                <div className="list-header">
-                  {renamingListId === list.listId ? (
-                    <>
-                      <input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateList(list.listId, { name: renameValue });
-                            setRenamingListId(null);
-                          }
-                          if (e.key === 'Escape') setRenamingListId(null);
-                        }}
-                      />
-                      <div className="list-actions">
-                        <button onClick={() => { handleUpdateList(list.listId, { name: renameValue }); setRenamingListId(null); }}>Guardar</button>
-                        <button onClick={() => setRenamingListId(null)}>Cancelar</button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <h2>{list.name}</h2>
-                      <div className="list-actions">
-                        <button
-                          onClick={() => {
-                            if (isReadOnly) return;
-                            setOpenMenuListId(openMenuListId === list.listId ? null : list.listId);
+      {/* Filtros fuera del contenedor flex de columnas para evitar desplazamientos/mis-drops */}
+      <div style={{ margin: '8px 12px 0 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Buscar…"
+          value={filters?.q || ''}
+          onChange={(e) => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), q: e.target.value })}
+          style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}
+          ref={searchRef}
+        />
+        {users.length > 1 && (
+          <select
+            value={filters?.assignedUserId || ''}
+            onChange={(e) => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), assignedUserId: e.target.value })}
+          >
+            <option value="">Todos</option>
+            {users.map(u => (<option key={u.userId} value={u.userId}>{u.name}</option>))}
+          </select>
+        )}
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), assignedToMe: !filters?.assignedToMe })}
+          className="filter-chip"
+          style={{ opacity: filters?.assignedToMe ? 1 : 0.6 }}
+        >Asignadas a mí</button>
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), dueToday: !filters?.dueToday })}
+          className="filter-chip"
+          style={{ opacity: filters?.dueToday ? 1 : 0.6 }}
+        >Vencen hoy</button>
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), noDueDate: !filters?.noDueDate })}
+          className="filter-chip"
+          style={{ opacity: filters?.noDueDate ? 1 : 0.6 }}
+        >Sin fecha</button>
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), overdue: !filters?.overdue })}
+          className="filter-chip"
+          style={{ opacity: filters?.overdue ? 1 : 0.6 }}
+        >Vencidas</button>
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), hasAttachments: !filters?.hasAttachments })}
+          className="filter-chip"
+          style={{ opacity: filters?.hasAttachments ? 1 : 0.6 }}
+        >Con adjuntos</button>
+        <button
+          onClick={() => onChangeFilters && onChangeFilters({ ...(filters || { q: '', assignedToMe: false, assignedUserId: '', dueToday: false, noDueDate: false, overdue: false, hasAttachments: false, showArchived: false }), showArchived: !filters?.showArchived })}
+          className="filter-chip"
+          style={{ opacity: filters?.showArchived ? 1 : 0.6 }}
+        >Archivadas</button>
+      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="kanban-board">
+          {lists.map((list) => (
+            <Droppable key={list.listId} droppableId={list.listId} isDropDisabled={isReadOnly}>
+              {(provided) => (
+                <div
+                  className="list"
+                  ref={(el) => { provided.innerRef(el); listRefs.current[list.listId] = el; }}
+                  {...provided.droppableProps}
+                >
+                  <div className="list-header">
+                    {renamingListId === list.listId ? (
+                      <>
+                        <input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdateList(list.listId, { name: renameValue });
+                              setRenamingListId(null);
+                            }
+                            if (e.key === 'Escape') setRenamingListId(null);
                           }}
-                          disabled={isReadOnly}
-                        >•••</button>
-                      </div>
-                    </>
+                        />
+                        <div className="list-actions">
+                          <button onClick={() => { handleUpdateList(list.listId, { name: renameValue }); setRenamingListId(null); }}>Guardar</button>
+                          <button onClick={() => setRenamingListId(null)}>Cancelar</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h2>{list.name}</h2>
+                        <div className="list-actions">
+                          <button
+                            onClick={() => {
+                              if (isReadOnly) return;
+                              setOpenMenuListId(openMenuListId === list.listId ? null : list.listId);
+                            }}
+                            disabled={isReadOnly}
+                          >•••</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {!isReadOnly && openMenuListId === list.listId && renamingListId !== list.listId && (
+                    <div className="list-actions" style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { setRenamingListId(list.listId); setRenameValue(list.name); setOpenMenuListId(null); }}>Renombrar</button>
+                      <button onClick={() => { setConfirmDelete({ open: true, listId: list.listId, busy: false }); setOpenMenuListId(null); }}>Eliminar</button>
+                    </div>
+                  )}
+                  <div className="cards-container">
+                    {(cards[list.listId] || [])
+                      .filter((card) => {
+                        // Archivadas: si showArchived está activo, mostramos sólo archivadas; si no, ocultamos archivadas
+                        if (filters?.showArchived) {
+                          if (!card.archived) return false;
+                        } else {
+                          if (card.archived) return false;
+                        }
+                        // Asignadas a mí (AND)
+                        const assignedOk = (filters?.assignedUserId && filters.assignedUserId !== '')
+                          ? card.assignedToUserId === filters.assignedUserId
+                          : (!(filters?.assignedToMe) || (!!currentUserId && card.assignedToUserId === currentUserId));
+                        // Fecha (OR entre dueToday / noDueDate)
+                        const hasDue = !!card.dueDate;
+                        const toLocal = (d: any) => { const dt = new Date(d); return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0); };
+                        const today = toLocal(new Date());
+                        const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+                        const isToday = hasDue ? (toLocal(card.dueDate as any) >= today && toLocal(card.dueDate as any) < tomorrow) : false;
+                        const isOverdue = hasDue ? (toLocal(card.dueDate as any) < today) : false;
+                        let dateOk = true;
+                        if (filters?.dueToday || filters?.noDueDate) {
+                          dateOk = (filters?.dueToday ? isToday : false) || (filters?.noDueDate ? !hasDue : false);
+                        }
+                        if (filters?.overdue) {
+                          dateOk = dateOk && isOverdue;
+                        }
+                        const attachmentsOk = !(filters?.hasAttachments) || (Array.isArray((card as any).attachments) && (card as any).attachments.length > 0);
+                        const q = (filters?.q || '').trim().toLowerCase();
+                        const textOk = !q || (card.title || '').toLowerCase().includes(q);
+                        return assignedOk && dateOk && attachmentsOk && textOk;
+                      })
+                      .map((card, index) => (
+                        <Card
+                          key={card.id}
+                          card={card}
+                          index={index}
+                          users={users}
+                          onEditCard={onEditCard}
+                          onStartFocus={onStartFocus}
+                          onToggleComplete={toggleComplete}
+                          onArchiveToggle={toggleArchive}
+                          readOnly={isReadOnly}
+                        />
+                      ))}
+                    {provided.placeholder}
+                  </div>
+                  {!isReadOnly && (
+                    <AddCardForm
+                      listId={list.listId}
+                      handleCreateCard={handleCreateCard}
+                      defaultAssignedToUserId={defaultAssignedToUserId}
+                      currentUserId={currentUserId}
+                      filters={filters}
+                      onChangeFilters={onChangeFilters}
+                    />
                   )}
                 </div>
-                {!isReadOnly && openMenuListId === list.listId && renamingListId !== list.listId && (
-                  <div className="list-actions" style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { setRenamingListId(list.listId); setRenameValue(list.name); setOpenMenuListId(null); }}>Renombrar</button>
-                    <button onClick={() => { setConfirmDelete({ open: true, listId: list.listId, busy: false }); setOpenMenuListId(null); }}>Eliminar</button>
-                  </div>
-                )}
-                <div className="cards-container">
-                  {(cards[list.listId] || [])
-                    .filter((card) => {
-                      // Archivadas: si showArchived está activo, mostramos sólo archivadas; si no, ocultamos archivadas
-                      if (filters?.showArchived) {
-                        if (!card.archived) return false;
-                      } else {
-                        if (card.archived) return false;
-                      }
-                      // Asignadas a mí (AND)
-                      const assignedOk = (filters?.assignedUserId && filters.assignedUserId !== '')
-                        ? card.assignedToUserId === filters.assignedUserId
-                        : (!(filters?.assignedToMe) || (!!currentUserId && card.assignedToUserId === currentUserId));
-                      // Fecha (OR entre dueToday / noDueDate)
-                      const hasDue = !!card.dueDate;
-                      const toLocal = (d: any) => { const dt = new Date(d); return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0,0,0,0); };
-                      const today = toLocal(new Date());
-                      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
-                      const isToday = hasDue ? (toLocal(card.dueDate as any) >= today && toLocal(card.dueDate as any) < tomorrow) : false;
-                      const isOverdue = hasDue ? (toLocal(card.dueDate as any) < today) : false;
-                      let dateOk = true;
-                      if (filters?.dueToday || filters?.noDueDate) {
-                        dateOk = (filters?.dueToday ? isToday : false) || (filters?.noDueDate ? !hasDue : false);
-                      }
-                      if (filters?.overdue) {
-                        dateOk = dateOk && isOverdue;
-                      }
-                      const attachmentsOk = !(filters?.hasAttachments) || (Array.isArray((card as any).attachments) && (card as any).attachments.length > 0);
-                      const q = (filters?.q || '').trim().toLowerCase();
-                      const textOk = !q || (card.title || '').toLowerCase().includes(q);
-                      return assignedOk && dateOk && attachmentsOk && textOk;
-                    })
-                    .map((card, index) => (
-                    <Card
-                      key={card.id}
-                      card={card}
-                      index={index}
-                      users={users}
-                      onEditCard={onEditCard}
-                      onStartFocus={onStartFocus}
-                      onToggleComplete={toggleComplete}
-                      onArchiveToggle={toggleArchive}
-                      readOnly={isReadOnly}
-                    />
-                  ))}
-                  {provided.placeholder}
-                </div>
-                {!isReadOnly && (
-                  <AddCardForm
-                    listId={list.listId}
-                    handleCreateCard={handleCreateCard}
-                    defaultAssignedToUserId={defaultAssignedToUserId}
-                    currentUserId={currentUserId}
-                    filters={filters}
-                    onChangeFilters={onChangeFilters}
-                  />
-                )}
+              )}
+            </Droppable>
+          ))}
+          {!isReadOnly && (
+            <div className="list">
+              <div className="list-header">
+                <h2>Nueva lista</h2>
               </div>
-            )}
-          </Droppable>
-        ))}
-        {!isReadOnly && (
-          <div className="list">
-            <div className="list-header">
-              <h2>Nueva lista</h2>
+              <div className="cards-container">
+                <input
+                  type="text"
+                  placeholder="Nombre de la lista"
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddList();
+                  }}
+                />
+                <button onClick={handleAddList} disabled={creatingList}>{creatingList ? 'Creando…' : '+ Añadir Lista'}</button>
+              </div>
             </div>
-            <div className="cards-container">
-              <input
-                type="text"
-                placeholder="Nombre de la lista"
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddList();
-                }}
-              />
-              <button onClick={handleAddList} disabled={creatingList}>{creatingList ? 'Creando…' : '+ Añadir Lista'}</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </DragDropContext>
-    {reordering && <LoadingOverlay message="Guardando orden…" />}
-    {!isReadOnly && (
-      <ConfirmDialog
-        open={confirmDelete.open}
-        title="Eliminar lista"
-        message="Se eliminará la lista y sus tarjetas. ¿Deseas continuar?"
-        confirmLabel="Eliminar"
-        cancelLabel="Cancelar"
-        busy={confirmDelete.busy}
-        onCancel={() => setConfirmDelete({ open: false, listId: null, busy: false })}
-        onConfirm={async () => {
-          if (!confirmDelete.listId) return;
-          setConfirmDelete(prev => ({ ...prev, busy: true }));
-          try {
-            await handleDeleteList(confirmDelete.listId);
-            setConfirmDelete({ open: false, listId: null, busy: false });
-          } catch (e) {
-            setConfirmDelete(prev => ({ ...prev, busy: false }));
-          }
-        }}
-      />
-    )}
+          )}
+        </div>
+      </DragDropContext>
+      {reordering && <LoadingOverlay message="Guardando orden…" />}
+      {!isReadOnly && (
+        <ConfirmDialog
+          open={confirmDelete.open}
+          title="Eliminar lista"
+          message="Se eliminará la lista y sus tarjetas. ¿Deseas continuar?"
+          confirmLabel="Eliminar"
+          cancelLabel="Cancelar"
+          busy={confirmDelete.busy}
+          onCancel={() => setConfirmDelete({ open: false, listId: null, busy: false })}
+          onConfirm={async () => {
+            if (!confirmDelete.listId) return;
+            setConfirmDelete(prev => ({ ...prev, busy: true }));
+            try {
+              await handleDeleteList(confirmDelete.listId);
+              setConfirmDelete({ open: false, listId: null, busy: false });
+            } catch (e) {
+              setConfirmDelete(prev => ({ ...prev, busy: false }));
+            }
+          }}
+        />
+      )}
     </>
   );
 };
@@ -373,9 +373,9 @@ const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, def
       if ((filters?.assignedToMe && currentUserId) || defaultAssignedToUserId) {
         payload.assignedToUserId = filters?.assignedToMe ? currentUserId : defaultAssignedToUserId;
       }
-      const today = new Date(); const local = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0,0,0,0);
+      const today = new Date(); const local = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       if (filters?.dueToday) payload.dueDate = local;
-      else if (filters?.overdue) payload.dueDate = new Date(local.getTime() - 24*60*60*1000);
+      else if (filters?.overdue) payload.dueDate = new Date(local.getTime() - 24 * 60 * 60 * 1000);
 
       await handleCreateCard(listId, payload);
       setNewCardTitle('');
@@ -412,5 +412,5 @@ const AddCardForm: React.FC<AddCardFormProps> = ({ listId, handleCreateCard, def
       <button onClick={onAddCard} disabled={adding}>{adding ? 'Añadiendo…' : '+ Añadir Tarjeta'}</button>
     </div>
   );
-  
+
 };
