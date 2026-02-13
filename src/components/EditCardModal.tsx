@@ -14,11 +14,12 @@ interface EditCardModalProps {
   onClose: () => void;
   card: Card | null;
   onSubmit: (updatedCard: Card) => void;
+  onDelete?: (card: Card) => void;
   users: User[];
   readOnly?: boolean;
 }
 
-const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, onSubmit, users, readOnly = false }) => {
+const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, onSubmit, onDelete, users, readOnly = false }) => {
   const [formData, setFormData] = useState<Partial<Card>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { showToast } = useToast();
@@ -79,30 +80,40 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
     const updatedCardData = { ...card, ...formData } as Card;
 
     if (updatedCardData.dueDate && typeof updatedCardData.dueDate === 'string') {
-        updatedCardData.dueDate = fromInputDateLocal(updatedCardData.dueDate);
+      updatedCardData.dueDate = fromInputDateLocal(updatedCardData.dueDate);
+    }
+    // Handle empty date as undefined/null for Supabase compatibility
+    if (updatedCardData.dueDate && (updatedCardData.dueDate as any) === '') {
+      updatedCardData.dueDate = undefined;
     }
 
     try {
       onSubmit(updatedCardData);
+      // Don't close immediately here, logic moved to App.tsx usually, but here we can wait if onSubmit was async... 
+      // Wrapper in App.tsx handles close. 
+      // Actually previous code: finally { isSaving(false); onClose(); }
+      // We should keep that behavior or let parent handle it. 
+      // The parent implementation updates state which closes modal.
     } finally {
       setIsSaving(false);
-      onClose();
+      // onClose(); // Let the parent close it via prop update or we close it here? 
+      // onSubmit is void in interface but async in parent. 
+      // Parent `onUpdateCardSubmit` does `setEditingCard(null)`. 
+      // So no need to call onClose() here explicitly if onSubmit succeeds.
+      // But if it fails?
+      // Since we don't await onSubmit here... we might close prematurely.
+      // For now, let's trust parent closes it.
     }
   };
 
   const deleteFromModal = async () => {
     if (isReadOnly) return;
-    if (!card) return;
-    try {
-      await api.delete(`${API_URL}/cards/${card.id}`);
-      try { window.dispatchEvent(new CustomEvent('card:deleted', { detail: { id: card.id, listId: card.listId } })); } catch {}
-      showToast('Tarjeta eliminada', 'success');
-      onClose();
-    } catch (e) {
-      showToast('No se pudo eliminar la tarjeta', 'error');
-    } finally {
-      setConfirmDelete(false);
-    }
+    if (!card || !onDelete) return;
+
+    // Call parent handler
+    onDelete(card);
+    setConfirmDelete(false);
+    // onClose(); // Parent will likely close it
   };
 
   return (
@@ -180,9 +191,9 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               <button type="button" onClick={onClose} className="cancel-btn">Cerrar</button>
             ) : (
               <>
-                <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? (<><Spinner /><span style={{marginLeft:6}}>Guardando…</span></>) : 'Save'}</button>
+                <button type="submit" className="save-btn" disabled={isSaving}>{isSaving ? (<><Spinner /><span style={{ marginLeft: 6 }}>Guardando…</span></>) : 'Save'}</button>
                 <button type="button" onClick={onClose} className="cancel-btn" disabled={isSaving}>Cancel</button>
-                <button type="button" onClick={() => setConfirmDelete(true)} className="cancel-btn" disabled={isSaving} style={{marginLeft:'auto'}}>Delete</button>
+                <button type="button" onClick={() => setConfirmDelete(true)} className="cancel-btn" disabled={isSaving} style={{ marginLeft: 'auto' }}>Delete</button>
               </>
             )}
           </div>

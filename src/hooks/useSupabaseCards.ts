@@ -129,11 +129,11 @@ export const useCards = (_boardId: string | null) => {
         updatedCards[listId].push(newCard); // Optimistic-ish update (fetchCards will correct)
         return updatedCards;
       });
-      showToast('Tarjeta creada', 'success');
+      return newCard;
     } catch (err: any) {
       setError('Failed to create card');
       console.error(err);
-      showToast('No se pudo crear la tarjeta', 'error');
+      throw err; // Re-throw for UI handling
     }
   };
 
@@ -146,6 +146,27 @@ export const useCards = (_boardId: string | null) => {
     } catch (err: any) {
       setError('Failed to update card');
       console.error(err);
+      throw err; // Re-throw for UI handling
+    }
+  };
+
+  const handleDeleteCard = async (cardId: string, listId: string) => {
+    try {
+      const { error } = await supabase.from('cards').delete().eq('id', cardId);
+      if (error) throw error;
+
+      // Optimistic update
+      setCardsByList(prev => {
+        const updatedCards = { ...prev };
+        if (updatedCards[listId]) {
+          updatedCards[listId] = updatedCards[listId].filter(c => c.id !== cardId);
+        }
+        return updatedCards;
+      });
+    } catch (err: any) {
+      setError('Failed to delete card');
+      console.error(err);
+      throw err;
     }
   };
 
@@ -202,5 +223,5 @@ export const useCards = (_boardId: string | null) => {
     }
   };
 
-  return { cards: cardsByList, isLoading, error, fetchCards, handleCreateCard, handleMoveCard, handleUpdateCard };
+  return { cards: cardsByList, isLoading, error, fetchCards, handleCreateCard, handleMoveCard, handleUpdateCard, handleDeleteCard };
 };
