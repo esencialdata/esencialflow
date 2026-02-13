@@ -85,9 +85,9 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
     if (updatedCardData.dueDate && typeof updatedCardData.dueDate === 'string') {
       updatedCardData.dueDate = fromInputDateLocal(updatedCardData.dueDate);
     }
-    // Handle empty date as undefined/null for Supabase compatibility
+    // Handle empty date as null for Supabase to clear the value
     if (updatedCardData.dueDate && (updatedCardData.dueDate as any) === '') {
-      updatedCardData.dueDate = undefined;
+      updatedCardData.dueDate = null as any;
     }
 
     try {

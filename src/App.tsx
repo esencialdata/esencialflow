@@ -94,9 +94,9 @@ function App() {
       setEditingCard(null);
 
       showToast('Tarjeta actualizada', 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating card:", error);
-      showToast('No se pudo actualizar la tarjeta', 'error');
+      showToast(`Error: ${error.message || 'No se pudo actualizar'}`, 'error');
     }
   };
 
