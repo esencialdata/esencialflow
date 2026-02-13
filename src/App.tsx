@@ -192,7 +192,6 @@ function App() {
         onDelete={onDeleteCardSubmit}
       />
 
-      <FocusWidget onOpen={() => focusCard ? null : setFocusCard(pomodoro.activeCard as Card)} />
       <ToastContainer />
     </div>
   );
