@@ -121,7 +121,7 @@ const FocusWidget: React.FC<{ onOpen?: () => void }> = ({ onOpen }) => {
       {!collapsed && (
         <div className="fw-actions">
           {!isRunning ? (
-            <button onClick={start}>Start</button>
+            <button onClick={() => start()}>Start</button>
           ) : (
             <button onClick={pause}>Pause</button>
           )}
