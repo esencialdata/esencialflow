@@ -3,7 +3,7 @@ import { Card, User, Attachment } from '../types/data';
 import './EditCardModal.css';
 import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
-import { useToast } from '../context/ToastContext';
+
 import CardComments from './CardComments';
 import CardAttachments from './CardAttachments';
 
