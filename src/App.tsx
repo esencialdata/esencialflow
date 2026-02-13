@@ -59,7 +59,7 @@ function App() {
 
   // Hooks
   const { currentBoardId } = useBoards(firebaseUser?.uid);
-  const { fetchCards: reloadCards, handleUpdateCard: updateCardSupabase } = useCards(currentBoardId);
+  const { fetchCards: reloadCards, handleUpdateCard: updateCardSupabase, handleDeleteCard: deleteCardSupabase } = useCards(currentBoardId);
   const pomodoro = usePomodoro();
   const { showToast } = useToast();
 
@@ -100,6 +100,20 @@ function App() {
     }
   };
 
+  const onDeleteCardSubmit = async (card: Card) => {
+    try {
+      await deleteCardSupabase(card.id, card.listId);
+      try { window.dispatchEvent(new CustomEvent('card:deleted', { detail: { id: card.id, listId: card.listId } })); } catch { }
+      setEditingCard(null);
+      if (focusCard && focusCard.id === card.id) {
+        setFocusCard(null);
+      }
+      showToast('Tarjeta eliminada', 'success');
+    } catch (error) {
+      console.error("Error deleting card:", error);
+      showToast('No se pudo eliminar la tarjeta', 'error');
+    }
+  };
 
   // Tunnel Mode Effect
   useEffect(() => {
@@ -174,6 +188,7 @@ function App() {
         users={allUsers}
         onClose={() => setEditingCard(null)}
         onSubmit={onUpdateCardSubmit}
+        onDelete={onDeleteCardSubmit}
       />
 
       <FocusWidget onOpen={() => focusCard ? null : setFocusCard(pomodoro.activeCard as Card)} />

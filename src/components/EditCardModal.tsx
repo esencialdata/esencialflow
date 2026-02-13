@@ -6,8 +6,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../context/ToastContext';
 import CardComments from './CardComments';
 import CardAttachments from './CardAttachments';
-import { API_URL } from '../config/api';
-import { api } from '../config/http';
+
 
 interface EditCardModalProps {
   isOpen: boolean;
