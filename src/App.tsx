@@ -76,7 +76,9 @@ function App() {
 
   const handleStartFocus = (card: Card) => {
     setFocusCard(card);
-    try { pomodoro.setActiveCard(card); } catch { }
+    try {
+      pomodoro.start(card);
+    } catch { }
   };
 
   // const handleCloseFocus = () => { setFocusCard(null); }; // Unused

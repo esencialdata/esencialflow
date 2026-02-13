@@ -16,7 +16,7 @@ interface PomodoroContextValue {
   // actions
   setActiveCard: (card: Card | null) => void;
   setUserId: (userId: string) => void;
-  start: () => Promise<void>;
+  start: (card?: Card) => Promise<void>;
   pause: () => void;
   stop: () => Promise<void>;
   setPreset: (focus: number, brk: number) => void;
@@ -238,9 +238,14 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [handlePhaseComplete]);
 
-  const start = async () => {
+  const start = async (card?: Card) => {
     // 1. Play audio IMMEDIATELY to secure "user gesture" before async/await
     audioRef.current?.play().catch(() => console.log('Audio play failed'));
+
+    if (card) {
+      setActiveCard(card);
+      stateRef.current.activeCard = card;
+    }
 
     const { activeCard, isRunning, userId, phase } = stateRef.current;
     if (!activeCard || isRunning) return;
