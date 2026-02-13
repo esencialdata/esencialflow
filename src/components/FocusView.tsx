@@ -2,9 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCards } from '../hooks/useSupabaseCards';
 import { Card } from '../types/data';
 
-import ActiveTimerOverlay from './ActiveTimerOverlay';
-import LoadingOverlay from './LoadingOverlay';
-import QueueModal from './QueueModal';
+
 import ActiveTimerOverlay from './ActiveTimerOverlay';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
