@@ -125,8 +125,8 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                 padding: '2rem',
                 boxSizing: 'border-box',
                 position: 'relative',
-                background: '#000', // Deep focus
-                color: '#fff'
+                background: '#0f172a', // Softer dark focus (Undo pure black)
+                color: '#f8fafc' // Slightly off-white text
             }}>
                 {/* Visual Pulse Background */}
                 <div className="pulse-bg" />
@@ -204,14 +204,14 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                         top: 50%; left: 50%;
                         transform: translate(-50%, -50%);
                         width: 100vw; height: 100vh;
-                        background: radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+                        background: radial-gradient(circle at center, rgba(59, 130, 246, 0.12) 0%, transparent 70%);
                         z-index: 0;
                         animation: gentle-pulse 4s infinite alternate;
                         pointer-events: none;
                     }
                     @keyframes gentle-pulse {
-                        0% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.9); }
-                        100% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+                        0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.95); }
+                        100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.05); }
                     }
                     .queue-toggle-btn {
                         position: absolute;
