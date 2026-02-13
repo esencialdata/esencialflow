@@ -21,7 +21,7 @@ interface EditCardModalProps {
 const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, onSubmit, onDelete, users, readOnly = false }) => {
   const [formData, setFormData] = useState<Partial<Card>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { showToast } = useToast();
+
   const [isSaving, setIsSaving] = useState(false);
   const isReadOnly = Boolean(readOnly);
 

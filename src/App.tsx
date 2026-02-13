@@ -59,7 +59,7 @@ function App() {
 
   // Hooks
   const { currentBoardId } = useBoards(firebaseUser?.uid);
-  const { fetchCards: reloadCards, handleUpdateCard: updateCardSupabase, handleDeleteCard: deleteCardSupabase } = useCards(currentBoardId);
+  const { handleUpdateCard: updateCardSupabase, handleDeleteCard: deleteCardSupabase } = useCards(currentBoardId);
   const pomodoro = usePomodoro();
   const { showToast } = useToast();
 
