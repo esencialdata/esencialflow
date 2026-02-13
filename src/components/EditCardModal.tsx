@@ -12,7 +12,7 @@ interface EditCardModalProps {
   isOpen: boolean;
   onClose: () => void;
   card: Card | null;
-  onSubmit: (updatedCard: Card) => void;
+  onSubmit: (updatedCard: Card) => void | Promise<void>;
   onDelete?: (card: Card) => void;
   users: User[];
   readOnly?: boolean;
@@ -55,9 +55,13 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     if (isReadOnly) return;
-    const { name, value } = e.target;
+    const { name, value, type } = e.target as HTMLInputElement; // cast to access 'type'
+
     if (name === 'priority') {
       setFormData(prev => ({ ...prev, priority: value as Card['priority'] }));
+    } else if (type === 'number') {
+      const numValue = value === '' ? undefined : Number(value);
+      setFormData(prev => ({ ...prev, [name]: numValue }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -68,7 +72,7 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
     setFormData(prev => ({ ...prev, attachments }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) {
       onClose();
@@ -87,21 +91,11 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
     }
 
     try {
-      onSubmit(updatedCardData);
-      // Don't close immediately here, logic moved to App.tsx usually, but here we can wait if onSubmit was async... 
-      // Wrapper in App.tsx handles close. 
-      // Actually previous code: finally { isSaving(false); onClose(); }
-      // We should keep that behavior or let parent handle it. 
-      // The parent implementation updates state which closes modal.
+      await onSubmit(updatedCardData);
+    } catch (e) {
+      console.error("Error in modal submit", e);
     } finally {
       setIsSaving(false);
-      // onClose(); // Let the parent close it via prop update or we close it here? 
-      // onSubmit is void in interface but async in parent. 
-      // Parent `onUpdateCardSubmit` does `setEditingCard(null)`. 
-      // So no need to call onClose() here explicitly if onSubmit succeeds.
-      // But if it fails?
-      // Since we don't await onSubmit here... we might close prematurely.
-      // For now, let's trust parent closes it.
     }
   };
 
