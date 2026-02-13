@@ -7,7 +7,6 @@ import { useBoards } from './hooks/useBoards';
 import { useCards } from './hooks/useSupabaseCards';
 import { Card, User } from './types/data';
 import logoUrl from '../logo_esencial_w.svg';
-import FocusWidget from './components/FocusWidget';
 import { usePomodoro } from './context/PomodoroContext';
 import ToastContainer from './components/ToastContainer';
 import { useToast } from './context/ToastContext';

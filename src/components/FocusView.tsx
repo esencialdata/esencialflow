@@ -181,6 +181,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
                             <span>Terminar</span>
                         </button>
+                        {'documentPictureInPicture' in window && (
+                            <button onClick={togglePiP} className="control-btn-large" title="Ventana Flotante">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10"></path><line x1="16" y1="5" x2="21" y2="5"></line><line x1="21" y1="5" x2="21" y2="10"></line><line x1="12" y1="14" x2="21" y2="5"></line></svg>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -190,6 +195,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                     queue={viewableQueue}
                     onJumpTo={(card) => { onStartFocus(card); }} // Switching focus
                     onToggleComplete={handleToggleComplete}
+                    onEdit={onEditCard}
                 />
 
                 <style>{`
