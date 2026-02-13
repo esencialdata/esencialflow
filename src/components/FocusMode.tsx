@@ -38,7 +38,7 @@ const FocusMode: React.FC<FocusModeProps> = ({ card, onClose }) => {
           <div className="timer-display">{mmss}</div>
           <div className="controls">
             {!isRunning ? (
-              <button onClick={start}>Start</button>
+              <button onClick={() => start()}>Start</button>
             ) : (
               <button onClick={pause}>Pause</button>
             )}
