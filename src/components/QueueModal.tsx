@@ -7,9 +7,10 @@ interface QueueModalProps {
     queue: Card[];
     onJumpTo: (card: Card) => void;
     onToggleComplete: (card: Card) => void;
+    onEdit: (card: Card) => void;
 }
 
-const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpTo, onToggleComplete }) => {
+const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpTo, onToggleComplete, onEdit }) => {
     if (!isOpen) return null;
 
     return (
@@ -30,18 +31,24 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                                     <span className="queue-index">#{index + 1}</span>
                                     <button
                                         className={`check-circle ${card.completed ? 'completed' : ''}`}
-                                        onClick={() => onToggleComplete(card)}
+                                        onClick={(e) => { e.stopPropagation(); onToggleComplete(card); }}
                                         title="Marcar como completado"
                                     >
                                         {card.completed && <span>✓</span>}
                                     </button>
-                                    <div className="queue-item-details">
+                                    <div
+                                        className="queue-item-details"
+                                        onClick={() => onEdit(card)}
+                                        title="Ver detalles / Editar"
+                                    >
                                         <h3 className={card.completed ? 'completed-text' : ''}>{card.title}</h3>
-                                        {card.priority === 'high' && <span className="tag high">Alta</span>}
-                                        {card.dueDate && <span className="tag date">{new Date(card.dueDate).toLocaleDateString()}</span>}
+                                        <div className="tags-row">
+                                            {card.priority === 'high' && <span className="tag high">Alta</span>}
+                                            {card.dueDate && <span className="tag date">{new Date(card.dueDate).toLocaleDateString()}</span>}
+                                        </div>
                                     </div>
                                 </div>
-                                <button className="jump-btn" onClick={() => { onJumpTo(card); onClose(); }}>
+                                <button className="jump-btn" onClick={(e) => { e.stopPropagation(); onJumpTo(card); onClose(); }}>
                                     Saltar aquí
                                 </button>
                             </div>
@@ -151,8 +158,18 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                 .queue-item-details {
                     display: flex;
                     flex-direction: column;
-                    gap: 2px;
+                    gap: 4px;
                     overflow: hidden;
+                    cursor: pointer;
+                    flex: 1;
+                }
+                .queue-item-details:hover h3 {
+                    color: #fff;
+                    text-decoration: underline;
+                    text-decoration-color: rgba(255,255,255,0.3);
+                }
+                .tags-row {
+                    display: flex; gap: 6px;
                 }
                 .queue-item-details h3 {
                     margin: 0;

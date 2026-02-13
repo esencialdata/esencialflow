@@ -325,6 +325,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                 queue={viewableQueue}
                 onJumpTo={(card) => { onStartFocus(card); }}
                 onToggleComplete={handleToggleComplete}
+                onEdit={onEditCard}
             />
 
             <style>{`
