@@ -20,6 +20,7 @@ interface PomodoroContextValue {
   pause: () => void;
   stop: () => Promise<void>;
   setPreset: (focus: number, brk: number) => void;
+  requestPermission: () => Promise<void>;
 }
 
 const PomodoroContext = createContext<PomodoroContextValue | undefined>(undefined);
@@ -360,6 +361,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     pause,
     stop,
     setPreset,
+    requestPermission: ensureNotifyPermission,
   };
 
   return <PomodoroContext.Provider value={value}>{children}</PomodoroContext.Provider>;

@@ -13,7 +13,7 @@ interface FocusViewProps {
 
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
     const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
-    const { isRunning, activeCard, mmss, pause, stop, phase, setPreset } = usePomodoro();
+    const { isRunning, activeCard, mmss, pause, stop, phase, setPreset, requestPermission } = usePomodoro();
     const [queueOpen, setQueueOpen] = useState(false);
 
     // Strict Sorting Logic
@@ -116,7 +116,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     if (isRunning && activeCard) {
         return (
             <div className="focus-view-container timer-active" style={{
-                height: '100vh',
+                minHeight: '100dvh', // Fix mobile viewport centering
                 width: '100vw',
                 display: 'flex',
                 flexDirection: 'column',
@@ -125,8 +125,16 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                 padding: '2rem',
                 boxSizing: 'border-box',
                 position: 'relative',
-                // background removed to use default theme
             }}>
+                {/* 1. Subtle Opacity Overlay (Background Dimmer) */}
+                <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0, 0, 0, 0.4)', // User requested "less opacity than before" but still some
+                    zIndex: 0,
+                    pointerEvents: 'none'
+                }} />
+
                 {/* Visual Pulse Background */}
                 <div className="pulse-bg" />
 
@@ -139,7 +147,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                     {sortedQueue.length > 1 ? `Ver Cola (${sortedQueue.length - 1})` : 'Cola'}
                 </button>
 
-                <div style={{ textAlign: 'center', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ textAlign: 'center', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '800px' }}>
                     <div className="phase-badge" style={{
                         textTransform: 'uppercase',
                         letterSpacing: '0.2em',
@@ -151,8 +159,8 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                     </div>
 
                     <div className="timer-display" style={{
-                        fontSize: 'clamp(6rem, 20vw, 12rem)', // HUGE timer
-                        fontFamily: "'Outfit', monospace", // Use monospace if available or standard sans
+                        fontSize: 'clamp(5rem, 18vw, 12rem)', // Slightly adjust clamp for better fit
+                        fontFamily: "'Outfit', monospace",
                         fontWeight: 200,
                         lineHeight: 0.9,
                         marginBottom: '2rem',
@@ -171,7 +179,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                         {activeCard.title}
                     </h1>
 
-                    <div className="timer-controls" style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+                    <div className="timer-controls" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
                         {/* Presets - Quick Switch */}
                         <div className="presets-mini" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginRight: '1rem' }}>
                             <button onClick={() => setPreset(25, 5)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}>25m</button>
@@ -187,11 +195,19 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
                             <span>Terminar</span>
                         </button>
-                        {'documentPictureInPicture' in window && (
-                            <button onClick={togglePiP} className="control-btn-large" title="Ventana Flotante">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10"></path><line x1="16" y1="5" x2="21" y2="5"></line><line x1="21" y1="5" x2="21" y2="10"></line><line x1="12" y1="14" x2="21" y2="5"></line></svg>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {/* PiP Button */}
+                            {'documentPictureInPicture' in window && (
+                                <button onClick={togglePiP} className="control-btn-large" title="Ventana Flotante" style={{ padding: '0.8rem', minWidth: 'auto' }}>
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10"></path><line x1="16" y1="5" x2="21" y2="5"></line><line x1="21" y1="5" x2="21" y2="10"></line><line x1="12" y1="14" x2="21" y2="5"></line></svg>
+                                </button>
+                            )}
+                            {/* Notifications Button */}
+                            <button onClick={() => requestPermission()} className="control-btn-large" title="Activar Notificaciones" style={{ padding: '0.8rem', minWidth: 'auto' }}>
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                             </button>
-                        )}
+                        </div>
                     </div>
                 </div>
 
