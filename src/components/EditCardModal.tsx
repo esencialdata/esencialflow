@@ -3,6 +3,7 @@ import { Card, User, Attachment } from '../types/data';
 import './EditCardModal.css';
 import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
+import SmartDescription from './SmartDescription';
 
 import CardComments from './CardComments';
 import CardAttachments from './CardAttachments';
@@ -134,6 +135,17 @@ const EditCardModal: React.FC<EditCardModalProps> = ({ isOpen, onClose, card, on
               disabled={isSaving && !isReadOnly}
             />
           </label>
+          {formData.description && formData.description.match(/Score\s+calculado/i) && (
+            <div style={{
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: '8px',
+              padding: '12px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              marginBottom: '8px',
+            }}>
+              <SmartDescription description={formData.description as string} />
+            </div>
+          )}
           <label>
             Due Date:
             <input

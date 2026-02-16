@@ -4,6 +4,7 @@ import { Card } from '../types/data';
 import { usePomodoro } from '../context/PomodoroContext';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
+import SmartDescription from './SmartDescription';
 
 interface FocusViewProps {
     boardId: string | null;
@@ -348,17 +349,15 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                     </div>
 
                     {heroCard.description && (
-                        <p style={{
+                        <div style={{
                             fontSize: '1.2rem',
                             opacity: 0.7,
                             maxWidth: '600px',
                             margin: '0 auto 3rem auto',
                             lineHeight: 1.6
                         }}>
-                            {heroCard.description.length > 200
-                                ? heroCard.description.substring(0, 200) + '...'
-                                : heroCard.description}
-                        </p>
+                            <SmartDescription description={heroCard.description} compact maxLength={200} />
+                        </div>
                     )}
 
                     <button
