@@ -1,0 +1,186 @@
+{
+    "name": "Esencial Focus - Strategy Seed (Knowledge Base)",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "manual-trigger",
+            "name": "Manual Trigger",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "return [\n  {\n    json: {\n      content: 'POLITICA DE PRIORIZACION: Score = ((financial_impact_0_to_100 * 0.35) + (leverage_0_to_100 * 0.30) + (urgency_0_to_100 * 0.15) + (vital_impact_0_to_100 * 0.20)). Toda tarea debe ser evaluada con esta formula de Score antes de asignar prioridad.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'priority_formula' }\n    }\n  },\n  {\n    json: {\n      content: 'THRESHOLDS DE PRIORIDAD: P0_Survival (Score >= 90, ejecucion inmediata), P1_Growth (Score >= 75, ejecutar hoy), P2_Operational (Score >= 50, ejecutar esta semana), P3_Backlog (Score < 50, ideas y futuro). Solo 1 tarea P0 activa simultaneamente.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'priority_thresholds' }\n    }\n  },\n  {\n    json: {\n      content: 'RESTRICCIONES OPERATIVAS: Ventana de sueno HARD BLOCK de 21:00 a 05:00 — cualquier tarea en ese rango se agenda automaticamente para manana a las 06:00. Regla de foco: solo 1 tarea P0 activa a la vez, completar antes de iniciar otra.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'constraints' }\n    }\n  },\n  {\n    json: {\n      content: 'PROYECTO MIGA (PRJ-MIGA): SaaS MVP. Multiplicador de leverage: 1.5x. Foco principal: Ventas. Este proyecto tiene el mayor potencial de escalabilidad y debe priorizarse en decisiones de inversion de tiempo.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'project_reference', project_id: 'PRJ-MIGA' }\n    }\n  },\n  {\n    json: {\n      content: 'PROYECTO ESENCIAL WORK (PRJ-ESENCIAL): Agencia/Servicios. Multiplicador de leverage: 1.2x. Foco principal: Lead Generation. Genera flujo de caja operativo mientras se desarrolla Miga.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'project_reference', project_id: 'PRJ-ESENCIAL' }\n    }\n  },\n  {\n    json: {\n      content: 'PROYECTO KUCHEN STUDIO (PRJ-KUCHEN): Produccion creativa. Multiplicador de leverage: 1.0x. Foco principal: Produccion. Mantener eficiencia operativa, no escalar mas alla de capacidad actual.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'project_reference', project_id: 'PRJ-KUCHEN' }\n    }\n  },\n  {\n    json: {\n      content: 'MANTENIMIENTO VITAL (PRJ-VITAL): Salud, sueno y bienestar personal. Multiplicador de leverage: 2.0x (EL MAS ALTO). Foco principal: Salud y Sueno. Este dominio tiene prioridad maxima porque sin salud no hay ejecucion.',\n      metadata: { type: 'strategy', version: 'v4', domain: 'project_reference', project_id: 'PRJ-VITAL' }\n    }\n  }\n];"
+            },
+            "id": "strategy-chunks",
+            "name": "Chunks Estrategicos",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "insert",
+                "tableName": {
+                    "__rl": true,
+                    "value": "strategy_vectors",
+                    "mode": "list",
+                    "cachedResultName": "strategy_vectors"
+                },
+                "options": {}
+            },
+            "id": "supabase-vector-store",
+            "name": "Supabase Vector Store",
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "IEwBT6HdTXWBU4KU",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "modelName": "models/gemini-embedding-001"
+            },
+            "id": "gemini-embeddings",
+            "name": "Gemini Embeddings",
+            "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                400,
+                520
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "xDoWmcLjo7a5M06Q",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "id": "data-loader",
+            "name": "Default Data Loader",
+            "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+            "typeVersion": 1.1,
+            "position": [
+                600,
+                520
+            ]
+        },
+        {
+            "parameters": {
+                "chunkSize": 500,
+                "chunkOverlap": 50
+            },
+            "id": "text-splitter",
+            "name": "Text Splitter",
+            "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+            "typeVersion": 1,
+            "position": [
+                600,
+                700
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const count = items.length;\nreturn [{ json: { message: 'Base de Conocimientos Actualizada: ' + count + ' chunks insertados en strategy_vectors', count: count, timestamp: new Date().toISOString() } }];"
+            },
+            "id": "log-result",
+            "name": "Log Resultado",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                750,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Manual Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Chunks Estrategicos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Chunks Estrategicos": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Default Data Loader": {
+            "ai_document": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "ai_document",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Text Splitter": {
+            "ai_textSplitter": [
+                [
+                    {
+                        "node": "Default Data Loader",
+                        "type": "ai_textSplitter",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase Vector Store": {
+            "main": [
+                [
+                    {
+                        "node": "Log Resultado",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true
+    }
+}

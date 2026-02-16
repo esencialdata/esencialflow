@@ -1,5 +1,4 @@
 {
-    "name": "Esencial Focus - Final Hybrid Capture (Normalized)",
     "nodes": [
         {
             "parameters": {
@@ -8,19 +7,19 @@
                 ],
                 "additionalFields": {}
             },
-            "id": "telegram-trigger",
+            "id": "587b8f94-53b5-4988-9a7d-6b3bc10a336a",
             "name": "Telegram Trigger",
             "type": "n8n-nodes-base.telegramTrigger",
             "typeVersion": 1,
             "position": [
-                0,
-                300
+                1728,
+                64
             ],
             "webhookId": "telegram-webhook",
             "credentials": {
                 "telegramApi": {
                     "id": "aPpjHzQm8lZbXspM",
-                    "name": "Telegram Account"
+                    "name": "Telegram account"
                 }
             }
         },
@@ -35,13 +34,13 @@
                     ]
                 }
             },
-            "id": "check-voice",
+            "id": "66c3d0d8-1e61-4d5b-9110-6b6e5407350f",
             "name": "Es Nota de Voz?",
             "type": "n8n-nodes-base.if",
             "typeVersion": 1,
             "position": [
-                200,
-                300
+                1936,
+                64
             ]
         },
         {
@@ -50,19 +49,20 @@
                 "fileId": "={{ $('Telegram Trigger').item.json.message.voice.file_id }}",
                 "additionalFields": {}
             },
-            "id": "download-audio",
+            "id": "eaa2ebd8-fa75-48c1-8420-1445d96a4f24",
             "name": "Descargar Audio",
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                400,
-                200
+                2128,
+                -48
             ],
             "operation": "getFile",
+            "webhookId": "4292c3a4-3c8f-4610-99fe-941f0e91427b",
             "credentials": {
                 "telegramApi": {
                     "id": "aPpjHzQm8lZbXspM",
-                    "name": "Telegram Account"
+                    "name": "Telegram account"
                 }
             }
         },
@@ -72,59 +72,58 @@
                 "operation": "analyze",
                 "modelId": {
                     "__rl": true,
-                    "value": "models/gemini-1.5-flash",
+                    "value": "models/gemini-2.5-flash",
                     "mode": "list",
-                    "cachedResultName": "models/gemini-1.5-flash"
+                    "cachedResultName": "models/gemini-2.5-flash"
                 },
                 "text": "Transcribe este audio textualmente.",
                 "inputType": "binary",
                 "options": {}
             },
-            "id": "transcribe-audio",
+            "id": "651d8cda-22c5-4846-aca7-444af1eba8c4",
             "name": "Transcribir Audio (Gemini)",
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                600,
-                200
+                2336,
+                -48
             ],
             "credentials": {
                 "googlePalmApi": {
                     "id": "xDoWmcLjo7a5M06Q",
-                    "name": "Google Gemini Account"
+                    "name": "Google Gemini(PaLM) Api account"
                 }
             }
         },
         {
             "parameters": {
-                "jsCode": "// Normaliza la entrada (Texto o Transcripción) a un solo campo 'text'\nconst json = $input.item.json;\n// Busca el texto en varias propiedades posibles (Gemini a veces usa 'output' o 'content')\nconst text = json.text || json.output || json.content || (json.message && json.message.text);\n\nif (text && typeof text === 'string' && text.trim().length > 0) {\n  return { json: { text: text } };\n}\n\n// Si no hay texto, evita enviar vac\u00edo para que no falle el embedding\nreturn { json: { text: \"[Audio ininteligible o sin texto]\" } };"
+                "jsCode": "// Normaliza la entrada: busca texto con rutas EXPLÍCITAS\nconst json = $input.item.json;\nlet text = null;\n\n// 1. Gemini Audio/Vision: content.parts[0].text\nif (json.content && json.content.parts && json.content.parts[0] && json.content.parts[0].text) {\n  text = json.content.parts[0].text;\n}\n// 2. Gemini candidates: candidates[0].content.parts[0].text\nif (!text && json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0]) {\n  text = json.candidates[0].content.parts[0].text;\n}\n// 3. Campo directo 'text'\nif (!text && typeof json.text === 'string' && json.text.length > 2) {\n  text = json.text;\n}\n// 4. Campo 'output'\nif (!text && typeof json.output === 'string' && json.output.length > 2) {\n  text = json.output;\n}\n// 5. Campo 'content' como string\nif (!text && typeof json.content === 'string' && json.content.length > 2) {\n  text = json.content;\n}\n// 6. Campo 'response'\nif (!text && typeof json.response === 'string' && json.response.length > 2) {\n  text = json.response;\n}\n// 7. Telegram: message.text\nif (!text && json.message && typeof json.message.text === 'string') {\n  text = json.message.text;\n}\n// 8. Ultimo recurso: buscar cualquier string en el JSON completo\nif (!text) {\n  const raw = JSON.stringify(json);\n  const match = raw.match(/\"text\":\\s*\"([^\"]{3,})\"/); \n  if (match) text = match[1];\n}\n\nif (text && text.trim().length > 0) {\n  return { json: { text: text.trim() } };\n}\n\nreturn { json: { text: '[Audio ininteligible] Debug: ' + JSON.stringify(json).substring(0, 200) } };"
             },
-            "id": "normalize-input",
+            "id": "ea60d6c0-6ea8-4eda-9cc8-5eac62c76cb3",
             "name": "Normalizar Entrada",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                800,
-                300
+                2528,
+                64
             ]
         },
         {
             "parameters": {
-                "modelName": "models/embedding-001",
-                "options": {}
+                "modelName": "models/gemini-embedding-001"
             },
-            "id": "gemini-embeddings-model",
+            "id": "5099a361-e3db-4454-a0d4-f0e8754af559",
             "name": "Gemini Embeddings Model",
             "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
             "typeVersion": 1,
             "position": [
-                1000,
-                500
+                2736,
+                256
             ],
             "credentials": {
                 "googlePalmApi": {
                     "id": "xDoWmcLjo7a5M06Q",
-                    "name": "Google Gemini Account"
+                    "name": "Google Gemini(PaLM) Api account"
                 }
             }
         },
@@ -137,142 +136,142 @@
                     "mode": "id"
                 },
                 "prompt": "={{ $json.text }}",
-                "keyword": "={{ $json.text }}",
-                "options": {
-                    "matchCount": 3
-                }
+                "options": {}
             },
-            "id": "supabase-retriever",
+            "id": "a9144bc3-866a-4943-ba25-30010a9d291b",
             "name": "Recuperar Contexto (Supabase)",
             "alwaysOutputData": true,
             "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
             "typeVersion": 1,
             "position": [
-                1000,
-                300
+                2736,
+                64
             ],
             "credentials": {
                 "supabaseApi": {
                     "id": "IEwBT6HdTXWBU4KU",
-                    "name": "Supabase Account"
+                    "name": "Supabase account"
                 }
             }
         },
         {
             "parameters": {
-                "jsCode": "// Agrega el contexto en un solo bloque\nconst context = items.map(i => i.json.pageContent).join('\\n---\\n') || \"No se encontró contexto estratégico.\";\n\n// Recuperamos el input original del nodo anterior (Normalizar Entrada)\n// Como 'Recuperar Contexto' puede devolver varios items, necesitamos acceder a los datos del padre.\n// En n8n, $node[\"Normalizar Entrada\"].json... nos da el item original.\n\nconst input = $('Normalizar Entrada').first().json.text;\n\nreturn [{ json: { context, input } }];"
+                "jsCode": "// Agrega el contexto en un solo bloque\nconst context = items.map(i => i.json.pageContent).join('\\n---\\n') || \"No se encontró contexto estratégico.\";\n\n// Recuperamos el input original del nodo anterior (Normalizar Entrada)\n// Como 'Recuperar Contexto' puede devolver varios items, necesitamos acceder a los datos del padre.\n// En n8n, $ode[\"Normalizar Entrada\"].json... nos da el item original.\n\nconst input = $('Normalizar Entrada').first().json.text;\n\nreturn { json: { context, input } };"
             },
-            "id": "aggregate-context",
+            "id": "4a59a981-4b00-446b-a34d-f65045cf93a7",
             "name": "Unificar Contexto",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1250,
-                300
+                2992,
+                64
             ]
         },
         {
             "parameters": {
                 "modelId": {
                     "__rl": true,
-                    "value": "models/gemini-1.5-pro",
+                    "value": "models/gemini-2.5-flash",
                     "mode": "list",
-                    "cachedResultName": "models/gemini-1.5-pro"
+                    "cachedResultName": "models/gemini-2.5-flash"
                 },
                 "messages": {
                     "values": [
                         {
-                            "role": "user",
-                            "content": "=Eres el Agente Ejecutivo de Esencial Focus.\n\nTU MISIÓN:\nConvertir la ENTRADA (Texto o Audio Transcrito) en una TAREA ACCIONABLE para la app.\n\nCONTEXTO ESTRATÉGICO (Recuperado):\n{{ $json.context }}\n\nINSTRUCCIONES:\n1. Analiza la entrada.\n2. Usa el contexto estratégico para decidir prioridad y alinación. Si el contexto no es relevante, usa tu criterio.\n3. Si es una tarea vaga, hazla concreta.\n4. DEVUELVE SOLO JSON VÁLIDO. No markdown, no explicaciones.\n\nFORMATO JSON:\n{\n  \"title\": \"Verbo + Objeto\",\n  \"description\": \"Detalles...\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"dueDate\": null,\n  \"listId\": \"inbox\"\n}\n\nENTRADA DEL USUARIO:\n{{ $json.input }}"
+                            "content": "=Eres el SISTEMA OPERATIVO DE OPTIMIZACIÓN v4.0.\n\nTU OBJETIVO:\nAnalizar la entrada del usuario, cruzarla con el CONTEXTO ESTRATÉGICO recuperado y generar un JSON de tarea calculado matemáticamente.\n\nCONTEXTO RECUPERADO (Tus Leyes):\n{{ $json.context }}\n\nPASOS DE EJECUCIÓN OBLIGATORIOS:\n1. **Identificar Proyecto**: Asigna el `list_id` basándote en la lista de proyectos (ej. PRJ-MIGA, PRJ-VITAL). Si no encaja, usa \"inbox\".\n2. **Calcular Variables (0-100)**: Estima mentalmente:\n   - financial_impact (¿Trae dinero ya?)\n   - leverage (¿Facilita otras tareas? Usa el multiplier del proyecto)\n   - urgency (¿Se rompe algo si no se hace?)\n   - vital_impact (¿Afecta salud/energía?)\n3. **Aplicar Fórmula**: Score = (Financiero*0.35) + (Leverage*0.30) + (Urgencia*0.15) + (Vital*0.20).\n4. **Asignar Prioridad**:\n   - Si Score > 90 -> \"high\" (P0)\n   - Si Score > 75 -> \"medium\" (P1)\n   - Si Score > 50 -> \"low\" (P2)\n   - Si Score < 50 -> \"low\" (P3/Backlog)\n5. **Chequeo de Horario**: Si la entrada implica trabajar entre 21:00 y 05:00, la descripción DEBE empezar con \"[REPROGRAMADO POR SUEÑO]\".\n\nFORMATO DE SALIDA (JSON ÚNICO):\n{\n  \"title\": \"Verbo + Acción concreta\",\n  \"description\": \"Score calculado: [Valor]. Variables: Fin=[X], Lev=[X]. Contexto: [Resumen]\",\n  \"priority\": \"high\" | \"medium\" | \"low\",\n  \"list_id\": \"PRJ-XXXX\",\n  \"dueDate\": null\n}\n\nENTRADA DEL USUARIO:\n{{ $json.input }}"
                         }
                     ]
                 },
+                "builtInTools": {},
                 "options": {}
             },
-            "id": "ai-agent",
+            "id": "0c9eee8e-5324-44b7-b7df-d159b3bfc0b6",
             "name": "Agente Ejecutivo (Gemini)",
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                1500,
-                300
+                3152,
+                64
             ],
             "credentials": {
                 "googlePalmApi": {
                     "id": "xDoWmcLjo7a5M06Q",
-                    "name": "Google Gemini Account"
+                    "name": "Google Gemini(PaLM) Api account"
                 }
             }
         },
         {
             "parameters": {
-                "jsCode": "const text = $input.item.json.text || '';\nconst jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();\ntry {\n  return JSON.parse(jsonString);\n} catch (e) {\n  return { title: \"Error parsing AI response\", description: text, priority: \"medium\" };\n}"
+                "jsCode": "// Parsea el output del Agente Ejecutivo (Gemini)\n// Extrae el JSON de la tarea con los nombres de columnas de Supabase\nreturn items.map(item => {\n  const json = item.json;\n  let rawText = '';\n\n  // 1. Gemini Audio/Vision: content.parts[0].text\n  if (json.content && json.content.parts && json.content.parts[0] && json.content.parts[0].text) {\n    rawText = json.content.parts[0].text;\n  }\n  // 2. Gemini candidates\n  else if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0]) {\n    rawText = json.candidates[0].content.parts[0].text;\n  }\n  // 3. Campos directos string\n  else if (typeof json.text === 'string' && json.text.length > 2) {\n    rawText = json.text;\n  }\n  else if (typeof json.output === 'string' && json.output.length > 2) {\n    rawText = json.output;\n  }\n  else if (typeof json.response === 'string' && json.response.length > 2) {\n    rawText = json.response;\n  }\n  // 4. Si content es un objeto, buscar texto dentro\n  else if (typeof json.content === 'object' && json.content !== null) {\n    rawText = JSON.stringify(json.content);\n    const innerMatch = rawText.match(/\"text\":\\s*\"([\\s\\S]*?)\"/);\n    if (innerMatch) rawText = innerMatch[1];\n  }\n  // 5. Ultimo recurso\n  else {\n    rawText = JSON.stringify(json);\n    const innerMatch = rawText.match(/\"text\":\\s*\"([\\s\\S]*?)\"/);\n    if (innerMatch) rawText = innerMatch[1];\n  }\n\n  let parsedData = {};\n\n  try {\n    const match = rawText.match(/\\{[\\s\\S]*\\}/);\n    const jsonString = match ? match[0] : rawText;\n    parsedData = JSON.parse(jsonString);\n  } catch (e) {\n    parsedData = {\n      title: rawText.length > 3 ? rawText.slice(0, 80) : 'Tarea sin contenido',\n      description: 'Error de parseo: ' + e.message + ' | Raw: ' + rawText.substring(0, 150),\n      priority: 'medium',\n      list_id: 'inbox'\n    };\n  }\n\n  // Mapear a los nombres EXACTOS de las columnas de Supabase\n  const result = {\n    title: (parsedData.title && typeof parsedData.title === 'string' && parsedData.title.length > 0) ? parsedData.title : 'Tarea (Parseo Fallido)',\n    description: parsedData.description || '',\n    priority: parsedData.priority || 'medium',\n    list_id: parsedData.listId || parsedData.list_id || 'inbox',\n    due_date: parsedData.dueDate || parsedData.due_date || null\n  };\n\n  return { json: result };\n});"
             },
-            "id": "parse-json",
+            "id": "b7fbdaae-8402-4a8e-b879-5911921c6344",
             "name": "Parsear JSON",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1750,
-                300
+                3488,
+                64
             ]
         },
         {
             "parameters": {
-                "operation": "create",
-                "projectId": "YOUR_FIREBASE_PROJECT_ID",
-                "collection": "cards",
-                "columns": {
-                    "mappingMode": "defineBelow",
-                    "value": {
-                        "title": "={{ $json.title }}",
-                        "description": "={{ $json.description }}",
-                        "priority": "={{ $json.priority }}",
-                        "dueDate": "={{ $json.dueDate }}",
-                        "createdAt": "={{ new Date().toISOString() }}",
-                        "status": "todo",
-                        "listId": "inbox"
-                    },
-                    "matchingColumns": [],
-                    "schema": []
+                "method": "POST",
+                "url": "https://vqvfdqtzrnhsfeafwrua.supabase.co/rest/v1/cards",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxdmZkcXR6cm5oc2ZlYWZ3cnVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Mzc2MjAsImV4cCI6MjA4NjMxMzYyMH0.G_8Yw6GGhik9qvgh36dnjDTTrG5iy9Tei5_uA9Vb3JQ"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxdmZkcXR6cm5oc2ZlYWZ3cnVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Mzc2MjAsImV4cCI6MjA4NjMxMzYyMH0.G_8Yw6GGhik9qvgh36dnjDTTrG5iy9Tei5_uA9Vb3JQ"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
                 },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"title\": {{ JSON.stringify($json.title) }},\n  \"description\": {{ JSON.stringify($json.description) }},\n  \"priority\": {{ JSON.stringify($json.priority) }},\n  \"list_id\": {{ JSON.stringify($json.list_id) }}\n}",
                 "options": {}
             },
-            "id": "firebase-writer",
-            "name": "Crear Tarea en Firebase",
-            "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
-            "typeVersion": 1,
+            "id": "b514f23e-bea4-4ceb-9f83-79d06ba206d8",
+            "name": "Crear Tarea en Supabase",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
             "position": [
-                1950,
-                300
-            ],
-            "credentials": {
-                "googleFirebaseCloudFirestoreOAuth2Api": {
-                    "id": "YOUR_FIREBASE_CREDENTIAL_ID",
-                    "name": "Firebase Account"
-                }
-            }
+                3728,
+                64
+            ]
         },
         {
             "parameters": {
-                "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
-                "text": "=✅ *Tarea Creada*: {{ $('Parsear JSON').item.json.title }}\n🎯 *Prioridad*: {{ $('Parsear JSON').item.json.priority }}",
+                "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+                "text": "=✅ Tarea Creada\n📌 {{ $json[0] ? $json[0].title : $json.title }}\n🎯 Prioridad: {{ $json[0] ? $json[0].priority : $json.priority }}\n📂 Lista: {{ $json[0] ? $json[0].list_id : $json.list_id }}",
                 "additionalFields": {
                     "parse_mode": "Markdown"
                 }
             },
-            "id": "confirm-telegram",
+            "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
             "name": "Confirmar Creación",
             "type": "n8n-nodes-base.telegram",
             "typeVersion": 1,
             "position": [
-                2150,
-                300
+                3968,
+                64
             ],
             "credentials": {
                 "telegramApi": {
                     "id": "aPpjHzQm8lZbXspM",
-                    "name": "Telegram Account"
+                    "name": "Telegram account"
                 }
             }
         }
@@ -388,14 +387,14 @@
             "main": [
                 [
                     {
-                        "node": "Crear Tarea en Firebase",
+                        "node": "Crear Tarea en Supabase",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Crear Tarea en Firebase": {
+        "Crear Tarea en Supabase": {
             "main": [
                 [
                     {
@@ -406,5 +405,10 @@
                 ]
             ]
         }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "96da6dc1e111138c09c30a20af879f3f791af9a8b8966e98c34c3378490a44be"
     }
 }

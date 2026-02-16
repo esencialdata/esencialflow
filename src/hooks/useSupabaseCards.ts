@@ -106,16 +106,27 @@ export const useCards = (_boardId: string | null) => {
     // Subscribe to realtime changes
     const channel = supabase
       .channel('public:cards')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, (_payload) => {
-        // Simple strategy: Trigger a refetch or optimistically update. 
-        // For simplicity and correctness in 'Zen' mode, refetching is safer initially.
-        // Or we can dispatch the event for local updates if we want to mimic the old behavior.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, (payload) => {
+        console.log('🔔 Realtime event received:', payload.eventType, payload);
         fetchCards('global');
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status);
+      });
+
+    // iOS PWA fix: WebSocket is killed when app goes to background.
+    // Re-fetch cards when the app returns to the foreground.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ App visible again — refreshing cards');
+        fetchCards('global');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchCards]);
 
