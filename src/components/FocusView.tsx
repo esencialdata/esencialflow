@@ -17,6 +17,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     const { isRunning, activeCard, mmss, pause, stop, phase, setPreset, requestPermission } = usePomodoro();
     const [queueOpen, setQueueOpen] = useState(false);
 
+    // Extract numeric score from Gemini description
+    const extractScore = (desc?: string): number => {
+        if (!desc) return 0;
+        const match = desc.match(/Score\s+calculado:\s*([\d.]+)/i);
+        return match ? parseFloat(match[1]) : 0;
+    };
+
     // Strict Sorting Logic
     const sortedQueue = useMemo(() => {
         if (!cards) return [];
@@ -24,19 +31,24 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         const all = Object.values(cards).flat();
         const active = all.filter(c => !c.completed && !c.archived);
 
-        // Sort Logic: High Priority > Due Date > Oldest Created
+        // Sort Logic: High Priority > Score (desc) > Due Date > Oldest Created
         return active.sort((a, b) => {
             // 1. Priority: High vs Non-High
             if (a.priority === 'high' && b.priority !== 'high') return -1;
             if (b.priority === 'high' && a.priority !== 'high') return 1;
 
-            // 2. Due Date (Ascending: Earlier dates first)
+            // 2. Score numérico (mayor primero)
+            const scoreA = extractScore(a.description);
+            const scoreB = extractScore(b.description);
+            if (scoreA !== scoreB) return scoreB - scoreA;
+
+            // 3. Due Date (Ascending: Earlier dates first)
             const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
             const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
 
             if (dateA !== dateB) return dateA - dateB;
 
-            // 3. Created At (Oldest first)
+            // 4. Created At (Oldest first)
             const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return createdA - createdB;
