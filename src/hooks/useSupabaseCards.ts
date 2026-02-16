@@ -124,9 +124,16 @@ export const useCards = (_boardId: string | null) => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Sync with App.tsx modal actions (delete/update dispatch events)
+    const handleCardChange = () => fetchCards('global');
+    window.addEventListener('card:deleted', handleCardChange);
+    window.addEventListener('card:updated', handleCardChange);
+
     return () => {
       supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('card:deleted', handleCardChange);
+      window.removeEventListener('card:updated', handleCardChange);
     };
   }, [fetchCards]);
 
