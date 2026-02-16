@@ -58,8 +58,8 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   // Refs to hold current state for useCallback without dependencies
-  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId });
-  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId };
+  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec });
+  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec };
 
   // Rehydrate state on mount
   useEffect(() => {
@@ -185,7 +185,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     worker.onmessage = (e: MessageEvent) => {
       const { type, remainingSeconds } = e.data;
       if (type === 'tick') {
-        setRemainingSec(remainingSeconds);
+        setRemainingSec(Math.max(0, Number(remainingSeconds) || 0));
       } else if (type === 'done') {
         handlePhaseComplete();
       }
@@ -257,8 +257,15 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsRunning(true);
 
     // Calculate Absolute End Time to prevent drift
+    const phaseSeconds = (phase === 'focus' ? focusLen : breakLen) * 60;
+    const nextSeconds = remainingSec > 0 ? remainingSec : phaseSeconds;
     const now = Date.now();
-    const targetEndTime = now + (remainingSec * 1000);
+    const targetEndTime = now + (nextSeconds * 1000);
+
+    // Guard against stale 00:00 state from a prior stop/preset switch.
+    if (remainingSec <= 0) {
+      setRemainingSec(nextSeconds);
+    }
 
     // Save Initial State
     saveState({
@@ -274,7 +281,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     workerRef.current?.postMessage({
       command: 'start',
-      seconds: remainingSec,
+      seconds: nextSeconds,
       endTime: targetEndTime
     });
 
@@ -314,7 +321,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const stop = async () => {
-    const { phase, focusLen, breakLen, sessionId, activeCard } = stateRef.current;
+    const { phase, focusLen, breakLen, sessionId, activeCard, remainingSec: currentRemaining } = stateRef.current;
     setIsRunning(false);
     clearState();
     workerRef.current?.postMessage({ command: 'stop' });
@@ -323,7 +330,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const total = (phase === 'focus' ? focusLen : breakLen) * 60;
     if (sessionId) {
       try {
-        const elapsedMinutes = Math.round(((total - remainingSec) / 60) * 10) / 10;
+        const elapsedMinutes = Math.max(0, Math.round(((total - currentRemaining) / 60) * 10) / 10);
         await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
         if (activeCard && elapsedMinutes > 0 && phase === 'focus') {
           await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
@@ -338,13 +345,32 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const setPreset = (f: number, b: number) => {
+    const { phase, focusLen, breakLen, sessionId, activeCard, remainingSec: currentRemaining } = stateRef.current;
+    const total = (phase === 'focus' ? focusLen : breakLen) * 60;
+    const elapsedMinutes = Math.max(0, Math.round(((total - currentRemaining) / 60) * 10) / 10);
+
+    if (sessionId && elapsedMinutes > 0) {
+      (async () => {
+        try {
+          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
+          if (activeCard && phase === 'focus') {
+            await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
+          }
+        } catch (e) {
+          console.error('Failed to persist timer session before preset switch', e);
+        }
+      })();
+    }
+
     setIsRunning(false);
     clearState();
     workerRef.current?.postMessage({ command: 'stop' });
     audioRef.current?.pause();
+    setSessionId(null);
     setFocusLen(f);
     setBreakLen(b);
     setPhase('focus');
+    setRemainingSec(f * 60);
   };
 
   const value: PomodoroContextValue = {

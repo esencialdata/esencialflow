@@ -18,12 +18,18 @@ self.onmessage = function (e) {
       }
 
       // Calculate initial remainder
-      remainingSeconds = Math.ceil((targetTime - Date.now()) / 1000);
+      remainingSeconds = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
       self.postMessage({ type: 'tick', remainingSeconds });
+
+      // If it is already complete, emit done once and do not start interval
+      if (remainingSeconds <= 0) {
+        self.postMessage({ type: 'done' });
+        break;
+      }
 
       timerId = setInterval(() => {
         const now = Date.now();
-        const diff = Math.ceil((targetTime - now) / 1000);
+        const diff = Math.max(0, Math.ceil((targetTime - now) / 1000));
 
         remainingSeconds = diff;
         self.postMessage({ type: 'tick', remainingSeconds });
@@ -49,7 +55,6 @@ self.onmessage = function (e) {
         timerId = null;
       }
       remainingSeconds = 0;
-      self.postMessage({ type: 'tick', remainingSeconds });
       break;
   }
 };
