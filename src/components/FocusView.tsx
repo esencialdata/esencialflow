@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useCards } from '../hooks/useSupabaseCards';
 import { Card } from '../types/data';
 import { usePomodoro } from '../context/PomodoroContext';
@@ -20,6 +20,9 @@ const PRESETS = [
   { focus: 90, break: 15, label: '90/15' },
 ];
 
+const isIOSDevice = () => /iPad|iPhone|iPod/i.test(navigator.userAgent);
+const isStandalonePWA = () => window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
   const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
   const {
@@ -39,6 +42,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     start,
   } = usePomodoro();
   const { showToast } = useToast();
+  const requiresIOSInstall = isIOSDevice() && !isStandalonePWA();
 
   const [queueOpen, setQueueOpen] = useState(false);
 
@@ -91,13 +95,27 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   const phaseLabel = phase === 'focus' ? 'Enfoque' : 'Descanso';
 
-  const notificationLabel = notificationPermission === 'granted'
+  const notificationLabel = requiresIOSInstall
+    ? 'iPhone: agregar a inicio'
+    : notificationPermission === 'granted'
     ? 'Notificaciones activas'
     : notificationPermission === 'denied'
       ? 'Notificaciones bloqueadas'
       : notificationPermission === 'unsupported'
         ? 'No soportado por navegador'
         : 'Activar notificaciones';
+
+  useEffect(() => {
+    const handlePomodoroNotify = (event: Event) => {
+      const customEvent = event as CustomEvent<{ title?: string; body?: string }>;
+      const title = customEvent.detail?.title || 'Pomodoro';
+      const body = customEvent.detail?.body || 'Se completó una fase.';
+      showToast(`${title}: ${body}`, 'info', 5000);
+    };
+
+    window.addEventListener('pomodoro:notify', handlePomodoroNotify as EventListener);
+    return () => window.removeEventListener('pomodoro:notify', handlePomodoroNotify as EventListener);
+  }, [showToast]);
 
   const handleToggleComplete = async (card: Card) => {
     try {
@@ -109,6 +127,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   };
 
   const handleRequestPermission = async () => {
+    if (requiresIOSInstall) {
+      showToast('En iPhone: comparte esta página y elige “Agregar a pantalla de inicio”. Luego activa notificaciones en esa app.', 'info', 6500);
+      return;
+    }
+
     const permission = await requestPermission();
 
     if (permission === 'granted') {
@@ -169,7 +192,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           <button
             className={`focus-chip ${notificationPermission === 'granted' ? 'focus-chip--ok' : ''}`}
             onClick={handleRequestPermission}
-            disabled={notificationPermission === 'granted' || notificationPermission === 'unsupported'}
+            disabled={notificationPermission === 'granted'}
           >
             {notificationLabel}
           </button>

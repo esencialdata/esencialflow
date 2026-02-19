@@ -46,6 +46,16 @@ const getInitialPermission = (): BrowserPermission => {
   return Notification.permission;
 };
 
+const isIOSDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent);
+};
+
+const isStandalonePWA = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+};
+
 export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const defaultFocus = 25;
   const defaultBreak = 5;
@@ -98,13 +108,33 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return `${m}:${s}`;
   }, [remainingSec]);
 
+  const ensureServiceWorkerRegistration = useCallback(async () => {
+    if (!('serviceWorker' in navigator)) return null;
+
+    try {
+      const current = await navigator.serviceWorker.getRegistration();
+      if (current) return current;
+      return await navigator.serviceWorker.register('/sw.js');
+    } catch (error) {
+      console.error('Could not register service worker for notifications', error);
+      return null;
+    }
+  }, []);
+
   const ensureNotifyPermission = useCallback(async (): Promise<BrowserPermission> => {
     if (typeof Notification === 'undefined') {
       setNotificationPermission('unsupported');
       return 'unsupported';
     }
 
+    // iOS only supports Web Push for installed Home Screen web apps.
+    if (isIOSDevice() && !isStandalonePWA()) {
+      setNotificationPermission('unsupported');
+      return 'unsupported';
+    }
+
     try {
+      await ensureServiceWorkerRegistration();
       let nextPermission = Notification.permission;
       if (nextPermission === 'default') {
         nextPermission = await Notification.requestPermission();
@@ -115,7 +145,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotificationPermission(Notification.permission);
       return Notification.permission;
     }
-  }, []);
+  }, [ensureServiceWorkerRegistration]);
 
   const unlockAudio = useCallback(async (): Promise<AudioContext | null> => {
     if (typeof window === 'undefined') return null;
@@ -158,12 +188,11 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [unlockAudio]);
 
   const notify = useCallback(async (title: string, body: string) => {
-    const permission = await ensureNotifyPermission();
-
+    const permission: BrowserPermission = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+    let shown = false;
     if (permission === 'granted') {
-      let shown = false;
       try {
-        const registration = await navigator.serviceWorker?.getRegistration();
+        const registration = await ensureServiceWorkerRegistration();
         if (registration?.showNotification) {
           await registration.showNotification(title, {
             body,
@@ -191,8 +220,24 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       document.title = `⏰ ${title}`;
     }
 
+    try {
+      if (document.visibilityState === 'visible' || !shown) {
+        window.dispatchEvent(new CustomEvent('pomodoro:notify', { detail: { title, body } }));
+      }
+    } catch {
+      // Ignore UI dispatch errors.
+    }
+
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([180, 80, 180]);
+      } catch {
+        // Ignore vibration errors.
+      }
+    }
+
     await playBeep();
-  }, [ensureNotifyPermission, playBeep]);
+  }, [ensureServiceWorkerRegistration, playBeep]);
 
   const handlePhaseComplete = useCallback(async () => {
     if (phaseCompleteLockRef.current) return;
@@ -382,6 +427,10 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setNotificationPermission('unsupported');
         return;
       }
+      if (isIOSDevice() && !isStandalonePWA()) {
+        setNotificationPermission('unsupported');
+        return;
+      }
       setNotificationPermission(Notification.permission);
     };
 
@@ -565,6 +614,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsRunning(false);
     workerRef.current?.postMessage({ command: 'stop' });
     clearState();
+    setSessionId(null);
     mergeStateRef({ isRunning: false, sessionId: null, sessionType: null });
     setSessionType(null);
 
