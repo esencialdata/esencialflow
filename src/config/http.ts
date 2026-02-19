@@ -2,7 +2,10 @@ import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from './api';
 import { auth } from './firebase';
 
-export const api = axios.create();
+export const api = axios.create({
+  // Avoid indefinite hanging requests that can block timer side effects.
+  timeout: 15000,
+});
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   try {

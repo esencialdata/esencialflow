@@ -133,17 +133,27 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return 'unsupported';
     }
 
+    let nextPermission = Notification.permission;
+    if (nextPermission === 'default') {
+      try {
+        // Ask permission before awaiting any async step to preserve user gesture.
+        nextPermission = await Notification.requestPermission();
+      } catch {
+        nextPermission = Notification.permission;
+      }
+    }
+
+    setNotificationPermission(nextPermission);
+
+    if (nextPermission !== 'granted') {
+      return nextPermission;
+    }
+
     try {
       await ensureServiceWorkerRegistration();
-      let nextPermission = Notification.permission;
-      if (nextPermission === 'default') {
-        nextPermission = await Notification.requestPermission();
-      }
-      setNotificationPermission(nextPermission);
       return nextPermission;
     } catch {
-      setNotificationPermission(Notification.permission);
-      return Notification.permission;
+      return nextPermission;
     }
   }, [ensureServiceWorkerRegistration]);
 
@@ -239,6 +249,28 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await playBeep();
   }, [ensureServiceWorkerRegistration, playBeep]);
 
+  const persistCompletedSession = useCallback(async (
+    currentSessionId: string | null,
+    completedDuration: number,
+    completedSessionType: Phase,
+    currentCard: Card | null,
+  ) => {
+    if (!currentSessionId) return;
+
+    try {
+      await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
+        durationMinutes: completedDuration,
+        type: completedSessionType,
+      });
+
+      if (currentCard && completedSessionType === 'focus') {
+        await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: completedDuration });
+      }
+    } catch (error) {
+      console.error('Failed to complete timer session', error);
+    }
+  }, []);
+
   const handlePhaseComplete = useCallback(async () => {
     if (phaseCompleteLockRef.current) return;
     phaseCompleteLockRef.current = true;
@@ -264,20 +296,6 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       mergeStateRef({ isRunning: false, sessionId: null, sessionType: null });
 
       if (currentPhase === 'focus') {
-        if (currentSessionId) {
-          try {
-            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
-              durationMinutes: completedDuration,
-              type: completedSessionType,
-            });
-            if (currentCard && completedSessionType === 'focus') {
-              await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: completedDuration });
-            }
-          } catch (error) {
-            console.error('Failed to complete timer session', error);
-          }
-        }
-
         const nextRemaining = currentBreakLen * 60;
         await notify('Focus terminado', 'Buen trabajo. Toma un descanso.');
         setPhase('break');
@@ -295,18 +313,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           remainingSec: nextRemaining,
         });
         mergeStateRef({ phase: 'break', remainingSec: nextRemaining });
-      } else {
-        if (currentSessionId) {
-          try {
-            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
-              durationMinutes: completedDuration,
-              type: completedSessionType,
-            });
-          } catch (error) {
-            console.error('Failed to complete break session', error);
-          }
-        }
 
+        void persistCompletedSession(currentSessionId, completedDuration, completedSessionType, currentCard);
+      } else {
         const nextRemaining = currentFocusLen * 60;
         await notify('Descanso terminado', 'Volvamos al enfoque.');
         setPhase('focus');
@@ -324,11 +333,13 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           remainingSec: nextRemaining,
         });
         mergeStateRef({ phase: 'focus', remainingSec: nextRemaining });
+
+        void persistCompletedSession(currentSessionId, completedDuration, completedSessionType, null);
       }
     } finally {
       phaseCompleteLockRef.current = false;
     }
-  }, [mergeStateRef, notify, saveState]);
+  }, [mergeStateRef, notify, persistCompletedSession, saveState]);
 
   useEffect(() => {
     try {
@@ -491,8 +502,8 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (!currentCard || currentlyRunning) return;
 
-    await unlockAudio();
     void ensureNotifyPermission();
+    await unlockAudio();
 
     setIsRunning(true);
 
