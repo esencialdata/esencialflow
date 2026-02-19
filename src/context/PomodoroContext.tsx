@@ -30,6 +30,7 @@ interface PersistedPomodoroState {
   userId: string;
   phase: Phase;
   sessionId: string | null;
+  sessionType: Phase | null;
   isRunning: boolean;
   targetEndTime: number | null;
   focusLen: number;
@@ -61,6 +62,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [focusLen, setFocusLen] = useState<number>(defaultFocus);
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<Phase | null>(null);
   const [userId, setUserId] = useState<string>('user-1');
   const [notificationPermission, setNotificationPermission] = useState<BrowserPermission>(getInitialPermission);
 
@@ -83,8 +85,12 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
-  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec });
-  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec };
+  const stateRef = useRef({ isRunning, phase, sessionId, sessionType, focusLen, breakLen, activeCard, userId, remainingSec });
+  stateRef.current = { isRunning, phase, sessionId, sessionType, focusLen, breakLen, activeCard, userId, remainingSec };
+
+  const mergeStateRef = useCallback((partial: Partial<typeof stateRef.current>) => {
+    stateRef.current = { ...stateRef.current, ...partial };
+  }, []);
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -193,22 +199,37 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     phaseCompleteLockRef.current = true;
 
     try {
-      const { phase: currentPhase, sessionId: currentSessionId, focusLen: currentFocusLen, breakLen: currentBreakLen, activeCard: currentCard, userId: currentUserId } = stateRef.current;
+      const {
+        phase: currentPhase,
+        sessionId: currentSessionId,
+        sessionType: currentSessionType,
+        focusLen: currentFocusLen,
+        breakLen: currentBreakLen,
+        activeCard: currentCard,
+        userId: currentUserId,
+      } = stateRef.current;
+
+      const completedSessionType: Phase = currentSessionType ?? currentPhase;
+      const completedDuration = completedSessionType === 'focus' ? currentFocusLen : currentBreakLen;
 
       setIsRunning(false);
       workerRef.current?.postMessage({ command: 'stop' });
+      setSessionId(null);
+      setSessionType(null);
+      mergeStateRef({ isRunning: false, sessionId: null, sessionType: null });
 
       if (currentPhase === 'focus') {
         if (currentSessionId) {
           try {
-            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: currentFocusLen });
-            if (currentCard) {
-              await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: currentFocusLen });
+            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
+              durationMinutes: completedDuration,
+              type: completedSessionType,
+            });
+            if (currentCard && completedSessionType === 'focus') {
+              await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: completedDuration });
             }
           } catch (error) {
             console.error('Failed to complete timer session', error);
-          } finally {
-            setSessionId(null);
           }
         }
 
@@ -221,20 +242,23 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           userId: currentUserId,
           phase: 'break',
           sessionId: null,
+          sessionType: null,
           isRunning: false,
           targetEndTime: null,
           focusLen: currentFocusLen,
           breakLen: currentBreakLen,
           remainingSec: nextRemaining,
         });
+        mergeStateRef({ phase: 'break', remainingSec: nextRemaining });
       } else {
         if (currentSessionId) {
           try {
-            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: currentBreakLen });
+            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
+              durationMinutes: completedDuration,
+              type: completedSessionType,
+            });
           } catch (error) {
             console.error('Failed to complete break session', error);
-          } finally {
-            setSessionId(null);
           }
         }
 
@@ -247,17 +271,19 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           userId: currentUserId,
           phase: 'focus',
           sessionId: null,
+          sessionType: null,
           isRunning: false,
           targetEndTime: null,
           focusLen: currentFocusLen,
           breakLen: currentBreakLen,
           remainingSec: nextRemaining,
         });
+        mergeStateRef({ phase: 'focus', remainingSec: nextRemaining });
       }
     } finally {
       phaseCompleteLockRef.current = false;
     }
-  }, [notify, saveState]);
+  }, [mergeStateRef, notify, saveState]);
 
   useEffect(() => {
     try {
@@ -273,6 +299,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (saved.userId) setUserId(saved.userId);
       setPhase(savedPhase);
       setSessionId(saved.sessionId ?? null);
+      setSessionType((saved.sessionType ?? null) || (saved.sessionId ? savedPhase : null));
       setFocusLen(savedFocusLen);
       setBreakLen(savedBreakLen);
 
@@ -281,6 +308,17 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (diff > 0) {
           setRemainingSec(diff);
           setIsRunning(true);
+          mergeStateRef({
+            activeCard: saved.activeCard ?? null,
+            userId: saved.userId ?? 'user-1',
+            phase: savedPhase,
+            sessionId: saved.sessionId ?? null,
+            sessionType: (saved.sessionType ?? null) || (saved.sessionId ? savedPhase : null),
+            focusLen: savedFocusLen,
+            breakLen: savedBreakLen,
+            remainingSec: diff,
+            isRunning: true,
+          });
           setTimeout(() => {
             workerRef.current?.postMessage({
               command: 'start',
@@ -298,11 +336,22 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       setRemainingSec(fallbackRemaining);
       setIsRunning(false);
+      mergeStateRef({
+        activeCard: saved.activeCard ?? null,
+        userId: saved.userId ?? 'user-1',
+        phase: savedPhase,
+        sessionId: saved.sessionId ?? null,
+        sessionType: (saved.sessionType ?? null) || (saved.sessionId ? savedPhase : null),
+        focusLen: savedFocusLen,
+        breakLen: savedBreakLen,
+        remainingSec: fallbackRemaining,
+        isRunning: false,
+      });
     } catch (error) {
       console.error('Failed to rehydrate pomodoro state', error);
       clearState();
     }
-  }, [clearState]);
+  }, [clearState, mergeStateRef]);
 
   useEffect(() => {
     const worker = new Worker('/pomodoro-worker.js');
@@ -388,6 +437,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       breakLen: currentBreakLen,
       remainingSec: currentRemainingSec,
       sessionId: currentSessionId,
+      sessionType: currentSessionType,
     } = stateRef.current;
 
     if (!currentCard || currentlyRunning) return;
@@ -400,14 +450,31 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const phaseSeconds = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
     const nextSeconds = currentRemainingSec > 0 ? currentRemainingSec : phaseSeconds;
     const targetEndTime = Date.now() + (nextSeconds * 1000);
+    const shouldCreateSession = !currentSessionId || (currentSessionType && currentSessionType !== currentPhase);
+    const resumedSessionType = currentSessionType ?? (currentSessionId ? currentPhase : null);
+    const effectiveSessionId = shouldCreateSession ? null : currentSessionId;
+    const effectiveSessionType = shouldCreateSession ? null : resumedSessionType;
 
     setRemainingSec(nextSeconds);
+    mergeStateRef({
+      isRunning: true,
+      remainingSec: nextSeconds,
+      sessionId: effectiveSessionId,
+      sessionType: effectiveSessionType,
+    });
+    if (shouldCreateSession) {
+      setSessionId(null);
+      setSessionType(null);
+    } else if (effectiveSessionType) {
+      setSessionType(effectiveSessionType);
+    }
 
     saveState({
       activeCard: currentCard,
       userId: currentUserId,
       phase: currentPhase,
-      sessionId: currentSessionId,
+      sessionId: effectiveSessionId,
+      sessionType: effectiveSessionType,
       isRunning: true,
       targetEndTime,
       focusLen: currentFocusLen,
@@ -421,7 +488,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       endTime: targetEndTime,
     });
 
-    if (!currentSessionId) {
+    if (shouldCreateSession) {
       try {
         const response = await api.post(`${API_URL}/timer-sessions`, {
           cardId: currentCard.id,
@@ -432,11 +499,14 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const id = response.data?.id ?? response.data?.sessionId ?? null;
         if (id) {
           setSessionId(id);
+          setSessionType(currentPhase);
+          mergeStateRef({ sessionId: id, sessionType: currentPhase });
           saveState({
             activeCard: currentCard,
             userId: currentUserId,
             phase: currentPhase,
             sessionId: id,
+            sessionType: currentPhase,
             isRunning: true,
             targetEndTime,
             focusLen: currentFocusLen,
@@ -459,16 +529,19 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       breakLen: currentBreakLen,
       remainingSec: currentRemainingSec,
       sessionId: currentSessionId,
+      sessionType: currentSessionType,
     } = stateRef.current;
 
     setIsRunning(false);
     workerRef.current?.postMessage({ command: 'pause' });
+    mergeStateRef({ isRunning: false });
 
     saveState({
       activeCard: currentCard,
       userId: currentUserId,
       phase: currentPhase,
       sessionId: currentSessionId,
+      sessionType: currentSessionType ?? (currentSessionId ? currentPhase : null),
       isRunning: false,
       targetEndTime: null,
       focusLen: currentFocusLen,
@@ -483,21 +556,28 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       focusLen: currentFocusLen,
       breakLen: currentBreakLen,
       sessionId: currentSessionId,
+      sessionType: currentSessionType,
       activeCard: currentCard,
       remainingSec: currentRemainingSec,
     } = stateRef.current;
 
+    const effectiveSessionType: Phase = currentSessionType ?? currentPhase;
     setIsRunning(false);
     workerRef.current?.postMessage({ command: 'stop' });
     clearState();
+    mergeStateRef({ isRunning: false, sessionId: null, sessionType: null });
+    setSessionType(null);
 
-    const totalSeconds = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
+    const totalSeconds = (effectiveSessionType === 'focus' ? currentFocusLen : currentBreakLen) * 60;
     if (currentSessionId) {
       try {
         const elapsedMinutes = Math.max(0, Math.round(((totalSeconds - currentRemainingSec) / 60) * 10) / 10);
-        await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: elapsedMinutes });
+        await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
+          durationMinutes: elapsedMinutes,
+          type: effectiveSessionType,
+        });
 
-        if (currentCard && elapsedMinutes > 0 && currentPhase === 'focus') {
+        if (currentCard && elapsedMinutes > 0 && effectiveSessionType === 'focus') {
           await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: elapsedMinutes });
         }
       } catch (error) {
@@ -508,6 +588,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setRemainingSec(totalSeconds);
+    mergeStateRef({ remainingSec: totalSeconds });
   };
 
   const setPreset = (nextFocusLen: number, nextBreakLen: number) => {
@@ -516,19 +597,24 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       focusLen: currentFocusLen,
       breakLen: currentBreakLen,
       sessionId: currentSessionId,
+      sessionType: currentSessionType,
       activeCard: currentCard,
       remainingSec: currentRemainingSec,
       userId: currentUserId,
     } = stateRef.current;
 
-    const currentTotal = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
+    const effectiveSessionType: Phase = currentSessionType ?? currentPhase;
+    const currentTotal = (effectiveSessionType === 'focus' ? currentFocusLen : currentBreakLen) * 60;
     const elapsedMinutes = Math.max(0, Math.round(((currentTotal - currentRemainingSec) / 60) * 10) / 10);
 
     if (currentSessionId && elapsedMinutes > 0) {
       (async () => {
         try {
-          await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: elapsedMinutes });
-          if (currentCard && currentPhase === 'focus') {
+          await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, {
+            durationMinutes: elapsedMinutes,
+            type: effectiveSessionType,
+          });
+          if (currentCard && effectiveSessionType === 'focus') {
             await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: elapsedMinutes });
           }
         } catch (error) {
@@ -540,16 +626,27 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsRunning(false);
     workerRef.current?.postMessage({ command: 'stop' });
     setSessionId(null);
+    setSessionType(null);
     setFocusLen(nextFocusLen);
     setBreakLen(nextBreakLen);
     setPhase('focus');
     setRemainingSec(nextFocusLen * 60);
+    mergeStateRef({
+      isRunning: false,
+      sessionId: null,
+      sessionType: null,
+      focusLen: nextFocusLen,
+      breakLen: nextBreakLen,
+      phase: 'focus',
+      remainingSec: nextFocusLen * 60,
+    });
 
     saveState({
       activeCard: currentCard,
       userId: currentUserId,
       phase: 'focus',
       sessionId: null,
+      sessionType: null,
       isRunning: false,
       targetEndTime: null,
       focusLen: nextFocusLen,
