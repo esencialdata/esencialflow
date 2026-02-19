@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../types/data';
 import { API_URL } from '../config/api';
 import { api } from '../config/http';
 
 type Phase = 'focus' | 'break';
+type BrowserPermission = NotificationPermission | 'unsupported';
 
 interface PomodoroContextValue {
   activeCard: Card | null;
@@ -13,6 +14,7 @@ interface PomodoroContextValue {
   focusLen: number;
   breakLen: number;
   mmss: string;
+  notificationPermission: BrowserPermission;
   // actions
   setActiveCard: (card: Card | null) => void;
   setUserId: (userId: string) => void;
@@ -20,19 +22,37 @@ interface PomodoroContextValue {
   pause: () => void;
   stop: () => Promise<void>;
   setPreset: (focus: number, brk: number) => void;
-  requestPermission: () => Promise<void>;
+  requestPermission: () => Promise<BrowserPermission>;
+}
+
+interface PersistedPomodoroState {
+  activeCard: Card | null;
+  userId: string;
+  phase: Phase;
+  sessionId: string | null;
+  isRunning: boolean;
+  targetEndTime: number | null;
+  focusLen: number;
+  breakLen: number;
+  remainingSec: number;
+  savedAt: number;
 }
 
 const PomodoroContext = createContext<PomodoroContextValue | undefined>(undefined);
 
+const getInitialPermission = (): BrowserPermission => {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  return Notification.permission;
+};
+
 export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const defaultFocus = 25;
   const defaultBreak = 5;
-
-  // Refs & State
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const workerRef = useRef<Worker | null>(null);
   const STORAGE_KEY = 'pomodoro_state';
+
+  const workerRef = useRef<Worker | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const phaseCompleteLockRef = useRef(false);
 
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -42,62 +62,29 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [breakLen, setBreakLen] = useState<number>(defaultBreak);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('user-1');
+  const [notificationPermission, setNotificationPermission] = useState<BrowserPermission>(getInitialPermission);
 
-  // Persistence Helpers
-  const saveState = useCallback((state: any) => {
+  const saveState = useCallback((state: Omit<PersistedPomodoroState, 'savedAt'>) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         ...state,
-        savedAt: Date.now()
+        savedAt: Date.now(),
       }));
-    } catch { }
+    } catch {
+      // Ignore persistence errors.
+    }
   }, []);
 
   const clearState = useCallback(() => {
-    try { localStorage.removeItem(STORAGE_KEY); } catch { }
-  }, []);
-
-  // Refs to hold current state for useCallback without dependencies
-  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec });
-  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec };
-
-  // Rehydrate state on mount
-  useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved.targetEndTime) {
-          const now = Date.now();
-          const diff = Math.ceil((saved.targetEndTime - now) / 1000);
-
-          if (saved.isRunning && diff > 0) {
-            // Resume running
-            setActiveCard(saved.activeCard);
-            setUserId(saved.userId);
-            setPhase(saved.phase);
-            setSessionId(saved.sessionId);
-            setFocusLen(saved.focusLen);
-            setBreakLen(saved.breakLen);
-            setRemainingSec(diff);
-            setIsRunning(true);
-
-            // Sync worker and audio
-            setTimeout(() => {
-              workerRef.current?.postMessage({
-                command: 'start',
-                seconds: diff,
-                endTime: saved.targetEndTime
-              });
-              audioRef.current?.play().catch(() => { });
-            }, 500);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to rehydrate', e);
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore persistence errors.
     }
   }, []);
+
+  const stateRef = useRef({ isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec });
+  stateRef.current = { isRunning, phase, sessionId, focusLen, breakLen, activeCard, userId, remainingSec };
 
   const mmss = useMemo(() => {
     const m = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -105,272 +92,470 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return `${m}:${s}`;
   }, [remainingSec]);
 
-  const ensureNotifyPermission = async () => {
-    try {
-      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
-    } catch { }
-  };
+  const ensureNotifyPermission = useCallback(async (): Promise<BrowserPermission> => {
+    if (typeof Notification === 'undefined') {
+      setNotificationPermission('unsupported');
+      return 'unsupported';
+    }
 
-  const playBeep = () => {
     try {
-      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.value = 660; // Lower pitch (was 880) for less strident sound
-      o.connect(g);
-      g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.6, ctx.currentTime + 0.1); // Louder (was 0.2)
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.8);
-      o.start();
-      o.stop(ctx.currentTime + 0.9);
-    } catch { }
-  };
-
-  const notify = useCallback(async (title: string, body: string) => {
-    await ensureNotifyPermission();
-    try {
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification(title, { body });
+      let nextPermission = Notification.permission;
+      if (nextPermission === 'default') {
+        nextPermission = await Notification.requestPermission();
       }
-    } catch { }
-    playBeep();
+      setNotificationPermission(nextPermission);
+      return nextPermission;
+    } catch {
+      setNotificationPermission(Notification.permission);
+      return Notification.permission;
+    }
   }, []);
 
-  const handlePhaseComplete = useCallback(async () => {
-    const { phase, sessionId, focusLen, breakLen, activeCard } = stateRef.current;
-    setIsRunning(false);
+  const unlockAudio = useCallback(async (): Promise<AudioContext | null> => {
+    if (typeof window === 'undefined') return null;
 
-    if (phase === 'focus') {
-      if (sessionId) {
-        try {
-          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: focusLen });
-          if (activeCard) {
-            await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: focusLen });
-          }
-        } catch (e) {
-          console.error('Failed to complete timer session', e);
-        } finally {
-          setSessionId(null);
-        }
+    const WebAudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!WebAudioContext) return null;
+
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new WebAudioContext();
       }
-      await notify('Focus terminado', 'Buen trabajo. Toma un descanso.');
-      setPhase('break');
-      setRemainingSec(breakLen * 60);
-    } else { // phase === 'break'
-      if (sessionId) {
-        try {
-          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: breakLen });
-        } catch (e) {
-          console.error('Failed to complete break session', e);
-        } finally {
-          setSessionId(null);
-        }
+      if (audioCtxRef.current.state === 'suspended') {
+        await audioCtxRef.current.resume();
       }
-      await notify('Descanso terminado', 'Volvamos al enfoque.');
-      setPhase('focus');
-      setRemainingSec(focusLen * 60);
+      return audioCtxRef.current;
+    } catch {
+      return null;
     }
-  }, [notify, clearState]);
+  }, []);
+
+  const playBeep = useCallback(async () => {
+    const ctx = await unlockAudio();
+    if (!ctx) return;
+
+    try {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 660;
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.65);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.7);
+    } catch {
+      // Ignore audio errors.
+    }
+  }, [unlockAudio]);
+
+  const notify = useCallback(async (title: string, body: string) => {
+    const permission = await ensureNotifyPermission();
+
+    if (permission === 'granted') {
+      let shown = false;
+      try {
+        const registration = await navigator.serviceWorker?.getRegistration();
+        if (registration?.showNotification) {
+          await registration.showNotification(title, {
+            body,
+            tag: 'pomodoro-phase-notification',
+          });
+          shown = true;
+        }
+      } catch {
+        // Fall through to Notification API.
+      }
+
+      if (!shown) {
+        try {
+          new Notification(title, { body });
+          shown = true;
+        } catch {
+          // Ignore errors.
+        }
+      }
+
+      if (!shown) {
+        document.title = `⏰ ${title}`;
+      }
+    } else {
+      document.title = `⏰ ${title}`;
+    }
+
+    await playBeep();
+  }, [ensureNotifyPermission, playBeep]);
+
+  const handlePhaseComplete = useCallback(async () => {
+    if (phaseCompleteLockRef.current) return;
+    phaseCompleteLockRef.current = true;
+
+    try {
+      const { phase: currentPhase, sessionId: currentSessionId, focusLen: currentFocusLen, breakLen: currentBreakLen, activeCard: currentCard, userId: currentUserId } = stateRef.current;
+
+      setIsRunning(false);
+      workerRef.current?.postMessage({ command: 'stop' });
+
+      if (currentPhase === 'focus') {
+        if (currentSessionId) {
+          try {
+            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: currentFocusLen });
+            if (currentCard) {
+              await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: currentFocusLen });
+            }
+          } catch (error) {
+            console.error('Failed to complete timer session', error);
+          } finally {
+            setSessionId(null);
+          }
+        }
+
+        const nextRemaining = currentBreakLen * 60;
+        await notify('Focus terminado', 'Buen trabajo. Toma un descanso.');
+        setPhase('break');
+        setRemainingSec(nextRemaining);
+        saveState({
+          activeCard: currentCard,
+          userId: currentUserId,
+          phase: 'break',
+          sessionId: null,
+          isRunning: false,
+          targetEndTime: null,
+          focusLen: currentFocusLen,
+          breakLen: currentBreakLen,
+          remainingSec: nextRemaining,
+        });
+      } else {
+        if (currentSessionId) {
+          try {
+            await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: currentBreakLen });
+          } catch (error) {
+            console.error('Failed to complete break session', error);
+          } finally {
+            setSessionId(null);
+          }
+        }
+
+        const nextRemaining = currentFocusLen * 60;
+        await notify('Descanso terminado', 'Volvamos al enfoque.');
+        setPhase('focus');
+        setRemainingSec(nextRemaining);
+        saveState({
+          activeCard: currentCard,
+          userId: currentUserId,
+          phase: 'focus',
+          sessionId: null,
+          isRunning: false,
+          targetEndTime: null,
+          focusLen: currentFocusLen,
+          breakLen: currentBreakLen,
+          remainingSec: nextRemaining,
+        });
+      }
+    } finally {
+      phaseCompleteLockRef.current = false;
+    }
+  }, [notify, saveState]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+
+      const saved = JSON.parse(raw) as Partial<PersistedPomodoroState>;
+      const savedFocusLen = typeof saved.focusLen === 'number' ? saved.focusLen : defaultFocus;
+      const savedBreakLen = typeof saved.breakLen === 'number' ? saved.breakLen : defaultBreak;
+      const savedPhase: Phase = saved.phase === 'break' ? 'break' : 'focus';
+
+      setActiveCard(saved.activeCard ?? null);
+      if (saved.userId) setUserId(saved.userId);
+      setPhase(savedPhase);
+      setSessionId(saved.sessionId ?? null);
+      setFocusLen(savedFocusLen);
+      setBreakLen(savedBreakLen);
+
+      if (saved.isRunning && saved.targetEndTime) {
+        const diff = Math.max(0, Math.ceil((saved.targetEndTime - Date.now()) / 1000));
+        if (diff > 0) {
+          setRemainingSec(diff);
+          setIsRunning(true);
+          setTimeout(() => {
+            workerRef.current?.postMessage({
+              command: 'start',
+              seconds: diff,
+              endTime: saved.targetEndTime,
+            });
+          }, 250);
+          return;
+        }
+      }
+
+      const fallbackRemaining = typeof saved.remainingSec === 'number' && saved.remainingSec > 0
+        ? saved.remainingSec
+        : (savedPhase === 'focus' ? savedFocusLen : savedBreakLen) * 60;
+
+      setRemainingSec(fallbackRemaining);
+      setIsRunning(false);
+    } catch (error) {
+      console.error('Failed to rehydrate pomodoro state', error);
+      clearState();
+    }
+  }, [clearState]);
 
   useEffect(() => {
     const worker = new Worker('/pomodoro-worker.js');
     workerRef.current = worker;
 
-    worker.onmessage = (e: MessageEvent) => {
-      const { type, remainingSeconds } = e.data;
+    worker.onmessage = (event: MessageEvent) => {
+      const { type, remainingSeconds } = event.data;
       if (type === 'tick') {
         setRemainingSec(Math.max(0, Number(remainingSeconds) || 0));
       } else if (type === 'done') {
-        handlePhaseComplete();
+        void handlePhaseComplete();
       }
     };
 
-    worker.onerror = (e: ErrorEvent) => {
-      console.error('[CONTEXT] Error in Pomodoro worker:', e);
+    worker.onerror = (event: ErrorEvent) => {
+      console.error('[PomodoroContext] Worker error', event);
     };
 
     return () => {
       worker.terminate();
+      workerRef.current = null;
     };
   }, [handlePhaseComplete]);
 
   useEffect(() => {
-    if (!isRunning) {
-      const next = (phase === 'focus' ? focusLen : breakLen) * 60;
-      setRemainingSec(next);
-    }
-  }, [phase, focusLen, breakLen, isRunning]);
+    const syncPermission = () => {
+      if (typeof Notification === 'undefined') {
+        setNotificationPermission('unsupported');
+        return;
+      }
+      setNotificationPermission(Notification.permission);
+    };
+
+    syncPermission();
+    window.addEventListener('focus', syncPermission);
+    return () => window.removeEventListener('focus', syncPermission);
+  }, []);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Re-check storage to sync drift
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (raw) {
-            const saved = JSON.parse(raw);
-            if (saved.isRunning && saved.targetEndTime) {
-              const now = Date.now();
-              const diff = Math.ceil((saved.targetEndTime - now) / 1000);
-              if (diff > 0) {
-                setRemainingSec(diff);
-                // Ensure worker is in sync
-                workerRef.current?.postMessage({
-                  command: 'start',
-                  seconds: diff,
-                  endTime: saved.targetEndTime
-                });
-              } else if (saved.isRunning) {
-                // It finished while backgrounded
-                handlePhaseComplete();
-              }
-            }
-          }
-        } catch { }
+      if (document.visibilityState !== 'visible') return;
+
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+
+        const saved = JSON.parse(raw) as Partial<PersistedPomodoroState>;
+        if (!saved.isRunning || !saved.targetEndTime) return;
+
+        const diff = Math.max(0, Math.ceil((saved.targetEndTime - Date.now()) / 1000));
+        if (diff > 0) {
+          setRemainingSec(diff);
+          workerRef.current?.postMessage({
+            command: 'start',
+            seconds: diff,
+            endTime: saved.targetEndTime,
+          });
+          return;
+        }
+
+        void handlePhaseComplete();
+      } catch {
+        // Ignore visibility sync errors.
       }
     };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [handlePhaseComplete]);
 
   const start = async (card?: Card) => {
-    // 1. Play audio IMMEDIATELY to secure "user gesture" before async/await
-    audioRef.current?.play().catch(() => console.log('Audio play failed'));
-
     if (card) {
       setActiveCard(card);
       stateRef.current.activeCard = card;
     }
 
-    const { activeCard, isRunning, userId, phase } = stateRef.current;
-    if (!activeCard || isRunning) return;
+    const {
+      activeCard: currentCard,
+      isRunning: currentlyRunning,
+      userId: currentUserId,
+      phase: currentPhase,
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      remainingSec: currentRemainingSec,
+      sessionId: currentSessionId,
+    } = stateRef.current;
 
-    // Request permission explicitly on user interaction (start)
-    await ensureNotifyPermission();
+    if (!currentCard || currentlyRunning) return;
+
+    await unlockAudio();
+    void ensureNotifyPermission();
 
     setIsRunning(true);
 
-    // Calculate Absolute End Time to prevent drift
-    const phaseSeconds = (phase === 'focus' ? focusLen : breakLen) * 60;
-    const nextSeconds = remainingSec > 0 ? remainingSec : phaseSeconds;
-    const now = Date.now();
-    const targetEndTime = now + (nextSeconds * 1000);
+    const phaseSeconds = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
+    const nextSeconds = currentRemainingSec > 0 ? currentRemainingSec : phaseSeconds;
+    const targetEndTime = Date.now() + (nextSeconds * 1000);
 
-    // Guard against stale 00:00 state from a prior stop/preset switch.
-    if (remainingSec <= 0) {
-      setRemainingSec(nextSeconds);
-    }
+    setRemainingSec(nextSeconds);
 
-    // Save Initial State
     saveState({
-      activeCard,
-      userId,
-      phase,
-      sessionId: null, // Will update when API returns
+      activeCard: currentCard,
+      userId: currentUserId,
+      phase: currentPhase,
+      sessionId: currentSessionId,
       isRunning: true,
       targetEndTime,
-      focusLen,
-      breakLen
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      remainingSec: nextSeconds,
     });
 
     workerRef.current?.postMessage({
       command: 'start',
       seconds: nextSeconds,
-      endTime: targetEndTime
+      endTime: targetEndTime,
     });
 
-    if (!sessionId) {
+    if (!currentSessionId) {
       try {
-        const res = await api.post(`${API_URL}/timer-sessions`, {
-          cardId: activeCard.id,
-          userId: userId,
-          type: phase,
+        const response = await api.post(`${API_URL}/timer-sessions`, {
+          cardId: currentCard.id,
+          userId: currentUserId,
+          type: currentPhase,
         });
-        const id = (res.data?.id) || res.data?.sessionId || null;
+
+        const id = response.data?.id ?? response.data?.sessionId ?? null;
         if (id) {
           setSessionId(id);
-          // Update saved state with session ID
           saveState({
-            activeCard,
-            userId,
-            phase,
+            activeCard: currentCard,
+            userId: currentUserId,
+            phase: currentPhase,
             sessionId: id,
             isRunning: true,
             targetEndTime,
-            focusLen,
-            breakLen
+            focusLen: currentFocusLen,
+            breakLen: currentBreakLen,
+            remainingSec: nextSeconds,
           });
         }
-      } catch (e) {
-        console.error('Failed to create timer session', e);
+      } catch (error) {
+        console.error('Failed to create timer session', error);
       }
     }
   };
 
   const pause = () => {
+    const {
+      activeCard: currentCard,
+      userId: currentUserId,
+      phase: currentPhase,
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      remainingSec: currentRemainingSec,
+      sessionId: currentSessionId,
+    } = stateRef.current;
+
     setIsRunning(false);
-    clearState();
     workerRef.current?.postMessage({ command: 'pause' });
-    audioRef.current?.pause();
+
+    saveState({
+      activeCard: currentCard,
+      userId: currentUserId,
+      phase: currentPhase,
+      sessionId: currentSessionId,
+      isRunning: false,
+      targetEndTime: null,
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      remainingSec: currentRemainingSec,
+    });
   };
 
   const stop = async () => {
-    const { phase, focusLen, breakLen, sessionId, activeCard, remainingSec: currentRemaining } = stateRef.current;
-    setIsRunning(false);
-    clearState();
-    workerRef.current?.postMessage({ command: 'stop' });
-    audioRef.current?.pause();
+    const {
+      phase: currentPhase,
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      sessionId: currentSessionId,
+      activeCard: currentCard,
+      remainingSec: currentRemainingSec,
+    } = stateRef.current;
 
-    const total = (phase === 'focus' ? focusLen : breakLen) * 60;
-    if (sessionId) {
+    setIsRunning(false);
+    workerRef.current?.postMessage({ command: 'stop' });
+    clearState();
+
+    const totalSeconds = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
+    if (currentSessionId) {
       try {
-        const elapsedMinutes = Math.max(0, Math.round(((total - currentRemaining) / 60) * 10) / 10);
-        await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
-        if (activeCard && elapsedMinutes > 0 && phase === 'focus') {
-          await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
+        const elapsedMinutes = Math.max(0, Math.round(((totalSeconds - currentRemainingSec) / 60) * 10) / 10);
+        await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: elapsedMinutes });
+
+        if (currentCard && elapsedMinutes > 0 && currentPhase === 'focus') {
+          await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: elapsedMinutes });
         }
-      } catch (e) {
-        console.error('Failed to end timer session', e);
+      } catch (error) {
+        console.error('Failed to end timer session', error);
       } finally {
         setSessionId(null);
       }
     }
-    setRemainingSec((phase === 'focus' ? focusLen : breakLen) * 60);
+
+    setRemainingSec(totalSeconds);
   };
 
-  const setPreset = (f: number, b: number) => {
-    const { phase, focusLen, breakLen, sessionId, activeCard, remainingSec: currentRemaining } = stateRef.current;
-    const total = (phase === 'focus' ? focusLen : breakLen) * 60;
-    const elapsedMinutes = Math.max(0, Math.round(((total - currentRemaining) / 60) * 10) / 10);
+  const setPreset = (nextFocusLen: number, nextBreakLen: number) => {
+    const {
+      phase: currentPhase,
+      focusLen: currentFocusLen,
+      breakLen: currentBreakLen,
+      sessionId: currentSessionId,
+      activeCard: currentCard,
+      remainingSec: currentRemainingSec,
+      userId: currentUserId,
+    } = stateRef.current;
 
-    if (sessionId && elapsedMinutes > 0) {
+    const currentTotal = (currentPhase === 'focus' ? currentFocusLen : currentBreakLen) * 60;
+    const elapsedMinutes = Math.max(0, Math.round(((currentTotal - currentRemainingSec) / 60) * 10) / 10);
+
+    if (currentSessionId && elapsedMinutes > 0) {
       (async () => {
         try {
-          await api.patch(`${API_URL}/timer-sessions/${sessionId}`, { durationMinutes: elapsedMinutes });
-          if (activeCard && phase === 'focus') {
-            await api.patch(`${API_URL}/cards/${activeCard.id}`, { incrementActualTime: elapsedMinutes });
+          await api.patch(`${API_URL}/timer-sessions/${currentSessionId}`, { durationMinutes: elapsedMinutes });
+          if (currentCard && currentPhase === 'focus') {
+            await api.patch(`${API_URL}/cards/${currentCard.id}`, { incrementActualTime: elapsedMinutes });
           }
-        } catch (e) {
-          console.error('Failed to persist timer session before preset switch', e);
+        } catch (error) {
+          console.error('Failed to persist timer session before preset switch', error);
         }
       })();
     }
 
     setIsRunning(false);
-    clearState();
     workerRef.current?.postMessage({ command: 'stop' });
-    audioRef.current?.pause();
     setSessionId(null);
-    setFocusLen(f);
-    setBreakLen(b);
+    setFocusLen(nextFocusLen);
+    setBreakLen(nextBreakLen);
     setPhase('focus');
-    setRemainingSec(f * 60);
+    setRemainingSec(nextFocusLen * 60);
+
+    saveState({
+      activeCard: currentCard,
+      userId: currentUserId,
+      phase: 'focus',
+      sessionId: null,
+      isRunning: false,
+      targetEndTime: null,
+      focusLen: nextFocusLen,
+      breakLen: nextBreakLen,
+      remainingSec: nextFocusLen * 60,
+    });
   };
 
   const value: PomodoroContextValue = {
@@ -381,6 +566,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     focusLen,
     breakLen,
     mmss,
+    notificationPermission,
     setActiveCard,
     setUserId,
     start,
@@ -394,7 +580,9 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 };
 
 export const usePomodoro = () => {
-  const ctx = useContext(PomodoroContext);
-  if (!ctx) throw new Error('usePomodoro must be used within PomodoroProvider');
-  return ctx;
+  const context = useContext(PomodoroContext);
+  if (!context) {
+    throw new Error('usePomodoro must be used within PomodoroProvider');
+  }
+  return context;
 };

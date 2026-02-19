@@ -60,7 +60,7 @@ function App() {
   // Hooks
   const { currentBoardId } = useBoards(firebaseUser?.uid);
   const { handleUpdateCard: updateCardSupabase, handleDeleteCard: deleteCardSupabase } = useCards(currentBoardId);
-  const pomodoro = usePomodoro();
+  const { start: startPomodoro, isRunning: isPomodoroRunning, setUserId } = usePomodoro();
   const { showToast } = useToast();
 
   // Users Logic (Simplified for Focus Mode)
@@ -74,11 +74,17 @@ function App() {
     }
   }, [firebaseUser]);
 
+  useEffect(() => {
+    if (firebaseUser?.uid) {
+      setUserId(firebaseUser.uid);
+    }
+  }, [firebaseUser?.uid, setUserId]);
+
   const handleStartFocus = (card: Card) => {
     setFocusCard(card);
-    try {
-      pomodoro.start(card);
-    } catch { }
+    void startPomodoro(card).catch(() => {
+      showToast('No se pudo iniciar el temporizador', 'error');
+    });
   };
 
   // const handleCloseFocus = () => { setFocusCard(null); }; // Unused
@@ -119,12 +125,12 @@ function App() {
 
   // Tunnel Mode Effect
   useEffect(() => {
-    if (pomodoro.isRunning) {
+    if (isPomodoroRunning) {
       document.body.classList.add('focus-tunnel');
     } else {
       document.body.classList.remove('focus-tunnel');
     }
-  }, [pomodoro.isRunning]);
+  }, [isPomodoroRunning]);
 
   // Auth Guard
   const isAuthenticated = useMemo(() => authStateChecked && !!firebaseUser, [authStateChecked, firebaseUser]);

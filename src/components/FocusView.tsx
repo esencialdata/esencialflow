@@ -1,442 +1,279 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useCards } from '../hooks/useSupabaseCards';
 import { Card } from '../types/data';
 import { usePomodoro } from '../context/PomodoroContext';
 import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
 import SmartDescription from './SmartDescription';
+import { useToast } from '../context/ToastContext';
+import './FocusView.css';
 
 interface FocusViewProps {
-    boardId: string | null;
-    onStartFocus: (card: Card) => void;
-    onEditCard: (card: Card) => void;
+  boardId: string | null;
+  onStartFocus: (card: Card) => void;
+  onEditCard: (card: Card) => void;
 }
 
+const PRESETS = [
+  { focus: 25, break: 5, label: '25/5' },
+  { focus: 50, break: 10, label: '50/10' },
+  { focus: 90, break: 15, label: '90/15' },
+];
+
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
-    const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
-    const { isRunning, activeCard, mmss, pause, stop, phase, setPreset, requestPermission } = usePomodoro();
-    const [queueOpen, setQueueOpen] = useState(false);
+  const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
+  const {
+    isRunning,
+    activeCard,
+    mmss,
+    pause,
+    stop,
+    phase,
+    setPreset,
+    requestPermission,
+    setActiveCard,
+    focusLen,
+    breakLen,
+    remainingSec,
+    notificationPermission,
+    start,
+  } = usePomodoro();
+  const { showToast } = useToast();
 
-    // Extract numeric score from Gemini description
-    const extractScore = (desc?: string): number => {
-        if (!desc) return 0;
-        const match = desc.match(/Score\s+calculado:\s*([\d.]+)/i);
-        return match ? parseFloat(match[1]) : 0;
-    };
+  const [queueOpen, setQueueOpen] = useState(false);
 
-    // Strict Sorting Logic
-    const sortedQueue = useMemo(() => {
-        if (!cards) return [];
+  const extractScore = (description?: string): number => {
+    if (!description) return 0;
+    const match = description.match(/Score\s+calculado:\s*([\d.]+)/i);
+    return match ? parseFloat(match[1]) : 0;
+  };
 
-        const all = Object.values(cards).flat();
-        const active = all.filter(c => !c.completed && !c.archived);
+  const sortedQueue = useMemo(() => {
+    if (!cards) return [];
 
-        // Sort Logic: High Priority > Score (desc) > Due Date > Oldest Created
-        return active.sort((a, b) => {
-            // 1. Priority: High vs Non-High
-            if (a.priority === 'high' && b.priority !== 'high') return -1;
-            if (b.priority === 'high' && a.priority !== 'high') return 1;
+    const active = Object.values(cards).flat().filter(card => !card.completed && !card.archived);
 
-            // 2. Score numérico (mayor primero)
-            const scoreA = extractScore(a.description);
-            const scoreB = extractScore(b.description);
-            if (scoreA !== scoreB) return scoreB - scoreA;
+    return active.sort((a, b) => {
+      if (a.priority === 'high' && b.priority !== 'high') return -1;
+      if (b.priority === 'high' && a.priority !== 'high') return 1;
 
-            // 3. Due Date (Ascending: Earlier dates first)
-            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const scoreA = extractScore(a.description);
+      const scoreB = extractScore(b.description);
+      if (scoreA !== scoreB) return scoreB - scoreA;
 
-            if (dateA !== dateB) return dateA - dateB;
+      const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+      if (dueA !== dueB) return dueA - dueB;
 
-            // 4. Created At (Oldest first)
-            const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return createdA - createdB;
-        });
-    }, [cards]);
+      const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return createdA - createdB;
+    });
+  }, [cards]);
 
-    const heroCard = sortedQueue.length > 0 ? sortedQueue[0] : null;
+  const heroCard = sortedQueue.length > 0 ? sortedQueue[0] : null;
+  const hasActiveCard = Boolean(activeCard);
 
-    // The "Rest" of the queue (excluding hero)
-    const viewableQueue = sortedQueue.slice(1);
+  const queueForModal = useMemo(() => {
+    if (activeCard) {
+      return sortedQueue.filter(card => card.id !== activeCard.id);
+    }
+    return sortedQueue.slice(1);
+  }, [sortedQueue, activeCard]);
 
-    const handleToggleComplete = async (card: Card) => {
-        try {
-            await handleUpdateCard(card.id, { completed: !card.completed });
-        } catch (e) {
-            console.error('Failed to toggle complete', e);
-        }
-    };
+  const phaseTotalSec = (phase === 'focus' ? focusLen : breakLen) * 60;
+  const progressPercent = Math.max(0, Math.min(100, ((phaseTotalSec - remainingSec) / phaseTotalSec) * 100));
+  const primaryActionLabel = isRunning
+    ? 'Pausar'
+    : remainingSec < phaseTotalSec
+      ? 'Reanudar'
+      : 'Iniciar';
 
-    const togglePiP = async () => {
-        if (!('documentPictureInPicture' in window)) return;
-        try {
-            const dpip = (window as any).documentPictureInPicture;
-            if (dpip.window) {
-                dpip.window.close();
-                return;
-            }
-            const win = await dpip.requestWindow({ width: 300, height: 150 });
+  const phaseLabel = phase === 'focus' ? 'Enfoque' : 'Descanso';
 
-            Array.from(document.styleSheets).forEach((styleSheet) => {
-                try {
-                    if (styleSheet.href) {
-                        const link = win.document.createElement('link');
-                        link.rel = 'stylesheet';
-                        link.href = styleSheet.href;
-                        win.document.head.appendChild(link);
-                    }
-                } catch (e) { }
-            });
+  const notificationLabel = notificationPermission === 'granted'
+    ? 'Notificaciones activas'
+    : notificationPermission === 'denied'
+      ? 'Notificaciones bloqueadas'
+      : notificationPermission === 'unsupported'
+        ? 'No soportado por navegador'
+        : 'Activar notificaciones';
 
-            const container = win.document.createElement('div');
-            container.style.display = 'flex';
-            container.style.flexDirection = 'column';
-            container.style.alignItems = 'center';
-            container.style.justifyContent = 'center';
-            container.style.height = '100vh';
-            container.style.background = '#000';
-            container.style.color = '#fff';
-            container.style.fontFamily = 'monospace';
+  const handleToggleComplete = async (card: Card) => {
+    try {
+      await handleUpdateCard(card.id, { completed: !card.completed });
+    } catch (err) {
+      console.error('Failed to toggle complete', err);
+      showToast('No se pudo actualizar el estado de la tarea', 'error');
+    }
+  };
 
-            const updatePiP = () => {
-                // Determine phase text
-                // Since we can't easily access the current 'phase' variable inside this interval closure without ref,
-                // we'll just show the timer and title.
-                // A full portal would be better but this is a quick implementation.
-                container.innerHTML = `
-                    <div style="font-size: 3rem; margin-bottom: 0.5rem; line-height: 1;">${document.querySelector('.timer-display')?.textContent || '--:--'}</div>
-                    <div style="font-size: 1rem; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;">${activeCard?.title || ''}</div>
-                `;
-            };
+  const handleRequestPermission = async () => {
+    const permission = await requestPermission();
 
-            updatePiP();
-            const interval = setInterval(updatePiP, 1000);
-
-            win.document.body.append(container);
-            win.document.body.style.margin = '0';
-
-            win.addEventListener('pagehide', () => clearInterval(interval));
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
-    if (error) return <div className="error-message">{error}</div>;
-
-    // --- TIMER VIEW (Active Session) ---
-    if (isRunning && activeCard) {
-        return (
-            <div className="focus-view-container timer-active" style={{
-                minHeight: '100dvh', // Fix mobile viewport centering
-                width: '100vw',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: '2rem',
-                boxSizing: 'border-box',
-                position: 'relative',
-            }}>
-                {/* 1. Subtle Opacity Overlay (Background Dimmer) */}
-                <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'rgba(0, 0, 0, 0.4)', // User requested "less opacity than before" but still some
-                    zIndex: 0,
-                    pointerEvents: 'none'
-                }} />
-
-                {/* Visual Pulse Background */}
-                <div className="pulse-bg" />
-
-                {/* Queue Toggle (still accessible) */}
-                <button
-                    onClick={() => setQueueOpen(true)}
-                    className="queue-toggle-btn"
-                >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                    {sortedQueue.length > 1 ? `Ver Cola (${sortedQueue.length - 1})` : 'Cola'}
-                </button>
-
-                <div style={{ textAlign: 'center', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '800px' }}>
-                    <div className="phase-badge" style={{
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.2em',
-                        fontSize: '1rem',
-                        color: phase === 'focus' ? 'var(--color-primary)' : '#4ade80',
-                        marginBottom: '2rem'
-                    }}>
-                        {phase === 'focus' ? 'ENFOQUE TOTAL' : 'DESCANSO'}
-                    </div>
-
-                    <div className="timer-display" style={{
-                        fontSize: 'clamp(5rem, 18vw, 12rem)', // Slightly adjust clamp for better fit
-                        fontFamily: "'Outfit', monospace",
-                        fontWeight: 200,
-                        lineHeight: 0.9,
-                        marginBottom: '2rem',
-                        fontVariantNumeric: 'tabular-nums'
-                    }}>
-                        {mmss}
-                    </div>
-
-                    <h1 style={{
-                        fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
-                        fontWeight: 600,
-                        margin: '0 0 3rem 0',
-                        maxWidth: '900px',
-                        opacity: 0.9
-                    }}>
-                        {activeCard.title}
-                    </h1>
-
-                    <div className="timer-controls" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {/* Presets - Quick Switch */}
-                        <div className="presets-mini" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginRight: '1rem' }}>
-                            <button onClick={() => setPreset(25, 5)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}>25m</button>
-                            <button onClick={() => setPreset(50, 10)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}>50m</button>
-                            <button onClick={() => setPreset(90, 15)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', borderRadius: '4px', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}>90m</button>
-                        </div>
-
-                        <button onClick={pause} className="control-btn-large pause">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                            <span>Pausar</span>
-                        </button>
-                        <button onClick={stop} className="control-btn-large stop">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-                            <span>Terminar</span>
-                        </button>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {/* PiP Button */}
-                            {'documentPictureInPicture' in window && (
-                                <button onClick={togglePiP} className="control-btn-large" title="Ventana Flotante" style={{ padding: '0.8rem', minWidth: 'auto' }}>
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h10"></path><line x1="16" y1="5" x2="21" y2="5"></line><line x1="21" y1="5" x2="21" y2="10"></line><line x1="12" y1="14" x2="21" y2="5"></line></svg>
-                                </button>
-                            )}
-                            {/* Notifications Button */}
-                            <button onClick={() => requestPermission()} className="control-btn-large" title="Activar Notificaciones" style={{ padding: '0.8rem', minWidth: 'auto' }}>
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <QueueModal
-                    isOpen={queueOpen}
-                    onClose={() => setQueueOpen(false)}
-                    queue={viewableQueue}
-                    onJumpTo={(card) => { onStartFocus(card); }} // Switching focus
-                    onToggleComplete={handleToggleComplete}
-                    onEdit={onEditCard}
-                />
-
-                <style>{`
-                    .pulse-bg {
-                        position: absolute;
-                        top: 50%; left: 50%;
-                        transform: translate(-50%, -50%);
-                        width: 100vw; height: 100vh;
-                        background: radial-gradient(circle at center, rgba(59, 130, 246, 0.12) 0%, transparent 70%);
-                        z-index: 0;
-                        animation: gentle-pulse 4s infinite alternate;
-                        pointer-events: none;
-                    }
-                    @keyframes gentle-pulse {
-                        0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.95); }
-                        100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.05); }
-                    }
-                    .queue-toggle-btn {
-                        position: absolute;
-                        top: 2rem; left: 2rem;
-                        background: rgba(255,255,255,0.05);
-                        border: 1px solid rgba(255,255,255,0.1);
-                        color: rgba(255,255,255,0.7);
-                        cursor: pointer;
-                        border-radius: 8px;
-                        padding: 8px 16px;
-                        font-size: 0.85rem;
-                        display: flex; alignItems: center; gap: 8px;
-                        transition: all 0.2s;
-                        z-index: 10;
-                    }
-                    .queue-toggle-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-                    .control-btn-large {
-                        background: transparent;
-                        border: 2px solid rgba(255,255,255,0.2);
-                        color: #fff;
-                        padding: 1rem 2rem;
-                        border-radius: 50px;
-                        font-size: 1.1rem;
-                        cursor: pointer;
-                        display: flex; alignItems: center; gap: 12px;
-                        transition: all 0.2s;
-                        text-transform: uppercase;
-                        letter-spacing: 0.05em;
-                        font-weight: 600;
-                    }
-                    .control-btn-large:hover {
-                         border-color: #fff;
-                         background: rgba(255,255,255,0.05);
-                         transform: translateY(-2px);
-                    }
-                    .control-btn-large.pause:hover { border-color: #fbbf24; color: #fbbf24; }
-                    .control-btn-large.stop:hover { border-color: #f87171; color: #f87171; }
-                `}</style>
-            </div >
-        );
+    if (permission === 'granted') {
+      showToast('Notificaciones activadas', 'success');
+      return;
     }
 
-    // --- STANDARD HERO VIEW ---
-    return (
-        <div className="focus-view-container" style={{
-            height: '100vh',
-            width: '100vw',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: '2rem',
-            boxSizing: 'border-box',
-            position: 'relative'
-        }}>
+    if (permission === 'denied') {
+      showToast('Las notificaciones están bloqueadas. Habilítalas en tu navegador.', 'error', 4500);
+      return;
+    }
 
-            {/* Top-Left Queue Toggle */}
-            <button
-                onClick={() => setQueueOpen(true)}
-                style={{
-                    position: 'absolute',
-                    top: '2rem',
-                    left: '2rem',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    color: 'var(--color-text-2)',
-                    cursor: 'pointer',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    transition: 'all 0.2s'
-                }}
-            >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                {sortedQueue.length > 1 ? `Ver Cola (${sortedQueue.length - 1} más)` : 'Ver Cola'}
+    if (permission === 'unsupported') {
+      showToast('Este navegador no soporta notificaciones del sistema.', 'error');
+      return;
+    }
+
+    showToast('Permiso de notificaciones pendiente', 'info');
+  };
+
+  const handlePrimaryAction = async () => {
+    if (isRunning) {
+      pause();
+      showToast('Sesión pausada', 'info');
+      return;
+    }
+
+    await start();
+    showToast('Sesión en curso', 'success');
+  };
+
+  const handleFinishSession = async () => {
+    await stop();
+    setActiveCard(null);
+    showToast('Sesión finalizada', 'info');
+  };
+
+  const highPriorityCount = sortedQueue.filter(card => card.priority === 'high').length;
+
+  if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
+  if (error) return <div className="error-message">{error}</div>;
+
+  return (
+    <div className={`focus-view ${hasActiveCard ? 'focus-view--active' : ''}`}>
+      <div className="focus-view__ambient" />
+
+      <header className="focus-view__topbar">
+        <button className="focus-chip" onClick={() => setQueueOpen(true)}>
+          Cola ({queueForModal.length})
+        </button>
+
+        <div className="focus-view__topbar-right">
+          {hasActiveCard && (
+            <button className="focus-chip focus-chip--ghost" onClick={() => void handleFinishSession()}>
+              Cerrar sesión
             </button>
-
-            {/* Hero Section */}
-            {heroCard ? (
-                <div className="hero-card" style={{
-                    textAlign: 'center',
-                    maxWidth: '800px',
-                    animation: 'fadeInUp 0.5s ease-out',
-                    zIndex: 1
-                }}>
-                    <div style={{ marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.9rem', color: 'var(--color-primary)' }}>
-                        TAREA #1
-                    </div>
-
-                    <h1 style={{
-                        fontSize: 'clamp(2.5rem, 5vw, 4rem)',
-                        fontWeight: 700,
-                        margin: '0 0 1.5rem 0',
-                        lineHeight: 1.1,
-                        textShadow: '0 10px 30px rgba(0,0,0,0.5)'
-                    }}>
-                        {heroCard.title}
-                    </h1>
-
-                    <div className="hero-meta" style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '2rem', opacity: 0.8 }}>
-                        {heroCard.priority === 'high' && (
-                            <span style={{ color: '#fca5a5', background: 'rgba(239, 68, 68, 0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>Alta Prioridad</span>
-                        )}
-                        {heroCard.dueDate && (
-                            <span style={{ color: '#cbd5e1', background: 'rgba(51, 65, 85, 0.5)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                                {new Date(heroCard.dueDate).toLocaleDateString()}
-                            </span>
-                        )}
-                    </div>
-
-                    {heroCard.description && (
-                        <div style={{
-                            fontSize: '1.2rem',
-                            opacity: 0.7,
-                            maxWidth: '600px',
-                            margin: '0 auto 3rem auto',
-                            lineHeight: 1.6
-                        }}>
-                            <SmartDescription description={heroCard.description} compact maxLength={200} />
-                        </div>
-                    )}
-
-                    <button
-                        onClick={() => onStartFocus(heroCard)}
-                        className="pulse-button"
-                        style={{
-                            background: 'var(--color-primary)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '100px',
-                            height: '100px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: '0 0 0 0 rgba(59, 130, 246, 0.7)',
-                            transition: 'transform 0.2s',
-                            marginTop: '1rem'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: '4px' }}><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    </button>
-
-                    <div style={{ marginTop: '1.5rem' }}>
-                        <button
-                            onClick={() => onEditCard(heroCard)}
-                            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '0.9rem' }}
-                        >
-                            Editar Tarea
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div style={{ textAlign: 'center', opacity: 0.6 }}>
-                    <h2>Todo limpio.</h2>
-                    <p>No hay tareas pendientes. Disfruta tu día.</p>
-                </div>
-            )}
-
-            <QueueModal
-                isOpen={queueOpen}
-                onClose={() => setQueueOpen(false)}
-                queue={viewableQueue}
-                onJumpTo={(card) => { onStartFocus(card); }}
-                onToggleComplete={handleToggleComplete}
-                onEdit={onEditCard}
-            />
-
-            <style>{`
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .pulse-button {
-            animation: pulse-blue 2s infinite;
-        }
-        @keyframes pulse-blue {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-      `}</style>
+          )}
+          <button
+            className={`focus-chip ${notificationPermission === 'granted' ? 'focus-chip--ok' : ''}`}
+            onClick={handleRequestPermission}
+            disabled={notificationPermission === 'granted' || notificationPermission === 'unsupported'}
+          >
+            {notificationLabel}
+          </button>
         </div>
-    );
+      </header>
+
+      {hasActiveCard ? (
+        <section className="focus-session">
+          <span className={`focus-session__phase ${phase === 'focus' ? 'focus' : 'break'}`}>
+            {phaseLabel}
+          </span>
+
+          <h1 className="focus-session__time">{mmss}</h1>
+
+          <div className="focus-session__progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressPercent)}>
+            <span style={{ width: `${progressPercent}%` }} />
+          </div>
+
+          <h2 className="focus-session__title">{activeCard?.title}</h2>
+
+          {activeCard?.description && (
+            <div className="focus-session__description">
+              <SmartDescription description={activeCard.description} compact maxLength={180} />
+            </div>
+          )}
+
+          <div className="focus-session__meta">
+            <span>{isRunning ? 'Sesión en curso' : 'Sesión en pausa'}</span>
+            <span>{focusLen}m / {breakLen}m</span>
+          </div>
+
+          <div className="focus-session__presets" aria-label="Duración">
+            {PRESETS.map(preset => {
+              const isSelected = preset.focus === focusLen && preset.break === breakLen;
+              return (
+                <button
+                  key={preset.label}
+                  className={`preset-button ${isSelected ? 'preset-button--active' : ''}`}
+                  onClick={() => setPreset(preset.focus, preset.break)}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="focus-session__actions">
+            <button className="focus-action focus-action--primary" onClick={() => void handlePrimaryAction()}>
+              {primaryActionLabel}
+            </button>
+            <button className="focus-action focus-action--danger" onClick={() => void handleFinishSession()}>
+              Terminar
+            </button>
+            <button className="focus-action" onClick={() => activeCard && onEditCard(activeCard)}>
+              Editar tarea
+            </button>
+          </div>
+        </section>
+      ) : heroCard ? (
+        <section className="focus-hero">
+          <span className="focus-hero__kicker">Siguiente tarea esencial</span>
+          <h1 className="focus-hero__title">{heroCard.title}</h1>
+
+          {heroCard.description && (
+            <div className="focus-hero__description">
+              <SmartDescription description={heroCard.description} compact maxLength={240} />
+            </div>
+          )}
+
+          <div className="focus-hero__meta">
+            <span>{sortedQueue.length} tareas activas</span>
+            <span>{highPriorityCount} prioridad alta</span>
+            {heroCard.dueDate && <span>Vence {new Date(heroCard.dueDate).toLocaleDateString()}</span>}
+          </div>
+
+          <div className="focus-hero__actions">
+            <button className="focus-action focus-action--primary" onClick={() => onStartFocus(heroCard)}>
+              Iniciar enfoque
+            </button>
+            <button className="focus-action" onClick={() => onEditCard(heroCard)}>
+              Editar
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="focus-empty">
+          <h2>Todo limpio</h2>
+          <p>No hay tareas pendientes. Es un buen momento para planear lo próximo.</p>
+        </section>
+      )}
+
+      <QueueModal
+        isOpen={queueOpen}
+        onClose={() => setQueueOpen(false)}
+        queue={queueForModal}
+        onJumpTo={card => {
+          onStartFocus(card);
+          setQueueOpen(false);
+        }}
+        onToggleComplete={handleToggleComplete}
+        onEdit={onEditCard}
+      />
+    </div>
+  );
 };
 
 export default FocusView;
