@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useCards } from '../hooks/useSupabaseCards';
 import { Card } from '../types/data';
 import { usePomodoro } from '../context/PomodoroContext';
@@ -14,11 +14,7 @@ interface FocusViewProps {
   onEditCard: (card: Card) => void;
 }
 
-const PRESETS = [
-  { focus: 25, break: 5, label: '25/5' },
-  { focus: 50, break: 10, label: '50/10' },
-  { focus: 90, break: 15, label: '90/15' },
-];
+
 
 const isIOSDevice = () => /iPad|iPhone|iPod/i.test(navigator.userAgent);
 const isStandalonePWA = () => window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -32,7 +28,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     pause,
     stop,
     phase,
-    setPreset,
+
     requestPermission,
     setActiveCard,
     focusLen,
@@ -45,11 +41,58 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const requiresIOSInstall = isIOSDevice() && !isStandalonePWA();
 
   const [queueOpen, setQueueOpen] = useState(false);
+  const [sleepProgress, setSleepProgress] = useState(0);
+
+  // Long press for editing
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const updateSleepProgress = () => {
+      const now = new Date();
+      const hardBlock = new Date(now);
+      hardBlock.setHours(21, 0, 0, 0); // 21:00 target
+
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const totalMs = hardBlock.getTime() - startOfDay.getTime();
+      const elapsedMs = now.getTime() - startOfDay.getTime();
+
+      let p = (elapsedMs / totalMs) * 100;
+      if (p > 100) p = 100;
+      if (p < 0) p = 0;
+      setSleepProgress(p);
+    };
+
+    updateSleepProgress();
+    const interval = setInterval(updateSleepProgress, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
 
   const extractScore = (description?: string): number => {
     if (!description) return 0;
     const match = description.match(/Score\s+calculado:\s*([\d.]+)/i);
     return match ? parseFloat(match[1]) : 0;
+  };
+
+  const extractProject = (description?: string): string | null => {
+    if (!description) return null;
+    const match = description.match(/(PRJ-[A-Z0-9]+)/i);
+    return match ? match[1].toUpperCase() : null;
+  };
+
+  const handlePressStart = (card: Card | null) => {
+    if (!card) return;
+    longPressTimerRef.current = setTimeout(() => {
+      onEditCard(card);
+    }, 600); // 600ms long press to edit
+  };
+
+  const handlePressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   };
 
   const sortedQueue = useMemo(() => {
@@ -87,23 +130,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   const phaseTotalSec = (phase === 'focus' ? focusLen : breakLen) * 60;
   const progressPercent = Math.max(0, Math.min(100, ((phaseTotalSec - remainingSec) / phaseTotalSec) * 100));
-  const primaryActionLabel = isRunning
-    ? 'Pausar'
-    : remainingSec < phaseTotalSec
-      ? 'Reanudar'
-      : 'Iniciar';
-
-  const phaseLabel = phase === 'focus' ? 'Enfoque' : 'Descanso';
-
-  const notificationLabel = requiresIOSInstall
-    ? 'iPhone: agregar a inicio'
-    : notificationPermission === 'granted'
-      ? 'Notificaciones activas'
-      : notificationPermission === 'denied'
-        ? 'Notificaciones bloqueadas'
-        : notificationPermission === 'unsupported'
-          ? 'No soportado por navegador'
-          : 'Activar notificaciones';
 
   useEffect(() => {
     const handlePomodoroNotify = (event: Event) => {
@@ -174,105 +200,127 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
   if (error) return <div className="error-message">{error}</div>;
 
+  // Render variables for current relevant card
+  const displayCard = hasActiveCard ? activeCard : heroCard;
+  const score = displayCard ? extractScore(displayCard.description) : 0;
+  const project = displayCard ? extractProject(displayCard.description) : null;
+
+  // Circular logic
+  const circleRadius = 110;
+  const circleStroke = 6;
+  const circleNormalizedRadius = circleRadius - circleStroke * 2;
+  const circleCircumference = circleNormalizedRadius * 2 * Math.PI;
+  // Progress goes backwards as time dwindles so offset increases
+  const strokeDashoffset = circleCircumference - (progressPercent / 100) * circleCircumference;
+
   return (
     <div className={`focus-view ${hasActiveCard ? 'focus-view--active' : ''}`}>
-      <div className="focus-view__ambient" />
+      {/* Sleep Bar */}
+      <div className="focus-view__sleep-bar">
+        <div className="focus-view__sleep-bar-inner" style={{ width: `${sleepProgress}%`, backgroundColor: sleepProgress > 90 ? '#ef4444' : '#3b82f6' }} />
+      </div>
 
       <header className="focus-view__topbar">
-        <button className="focus-chip" onClick={() => setQueueOpen(true)}>
-          Cola ({queueForModal.length})
-        </button>
-        {hasActiveCard && (
-          <button className="focus-chip focus-chip--ghost" onClick={() => void handleFinishSession()}>
-            Cerrar sesión
+        <div className="topbar-actions">
+          <button className="icon-btn" onClick={() => setQueueOpen(true)} title={`Cola (${queueForModal.length})`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span className="icon-badge">{queueForModal.length}</span>
           </button>
-        )}
-        <button
-          className={`focus-chip ${notificationPermission === 'granted' ? 'focus-chip--ok' : ''}`}
-          onClick={handleRequestPermission}
-          disabled={notificationPermission === 'granted'}
-        >
-          {notificationLabel}
-        </button>
+
+          <button
+            className={`icon-btn ${notificationPermission === 'granted' ? 'icon-btn--ok' : ''}`}
+            onClick={handleRequestPermission}
+            disabled={notificationPermission === 'granted'}
+            title="Notificaciones"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          </button>
+
+          {hasActiveCard && (
+            <button className="icon-btn icon-btn--danger" onClick={() => void handleFinishSession()} title="Cerrar sesión">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          )}
+        </div>
       </header>
 
-      {hasActiveCard ? (
-        <section className="focus-session">
-          <span className={`focus-session__phase ${phase === 'focus' ? 'focus' : 'break'}`}>
-            {phaseLabel}
-          </span>
-
-          <h1 className="focus-session__time">{mmss}</h1>
-
-          <div className="focus-session__progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressPercent)}>
-            <span style={{ width: `${progressPercent}%` }} />
-          </div>
-
-          <h2 className="focus-session__title">{activeCard?.title}</h2>
-
-          {activeCard?.description && (
-            <div className="focus-session__description">
-              <SmartDescription description={activeCard.description} compact maxLength={180} />
+      {displayCard ? (
+        <section
+          className="focus-hero"
+          onMouseDown={() => handlePressStart(displayCard)}
+          onMouseUp={handlePressEnd}
+          onMouseLeave={handlePressEnd}
+          onTouchStart={() => handlePressStart(displayCard)}
+          onTouchEnd={handlePressEnd}
+        >
+          {score > 0 && (
+            <div className="focus-hero__score" title="Score Calculado">
+              {score}
             </div>
           )}
 
-          <div className="focus-session__meta">
-            <span>{isRunning ? 'Sesión en curso' : 'Sesión en pausa'}</span>
-            <span>{focusLen}m / {breakLen}m</span>
-          </div>
+          {project ? (
+            <span className="focus-hero__project">{project}</span>
+          ) : (
+            <span className="focus-hero__project focus-hero__project--invisible">PRJ-NONE</span>
+          )}
 
-          <div className="focus-session__presets" aria-label="Duración">
-            {PRESETS.map(preset => {
-              const isSelected = preset.focus === focusLen && preset.break === breakLen;
-              return (
-                <button
-                  key={preset.label}
-                  className={`preset-button ${isSelected ? 'preset-button--active' : ''}`}
-                  onClick={() => setPreset(preset.focus, preset.break)}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
+          <h1 className="focus-hero__title">{displayCard.title}</h1>
 
-          <div className="focus-session__actions">
-            <button className="focus-action focus-action--primary" onClick={() => void handlePrimaryAction()}>
-              {primaryActionLabel}
-            </button>
-            <button className="focus-action focus-action--danger" onClick={() => void handleFinishSession()}>
-              Terminar
-            </button>
-            <button className="focus-action" onClick={() => activeCard && onEditCard(activeCard)}>
-              Editar tarea
-            </button>
-          </div>
-        </section>
-      ) : heroCard ? (
-        <section className="focus-hero">
-          <span className="focus-hero__kicker">Siguiente tarea esencial</span>
-          <h1 className="focus-hero__title">{heroCard.title}</h1>
-
-          {heroCard.description && (
+          {displayCard.description && !hasActiveCard && (
             <div className="focus-hero__description">
-              <SmartDescription description={heroCard.description} compact maxLength={240} />
+              <SmartDescription description={displayCard.description} compact maxLength={240} />
             </div>
           )}
 
-          <button className="focus-hero__circle" onClick={() => onStartFocus(heroCard)} aria-label="Iniciar enfoque">
-            <div className="focus-hero__circle-inner"></div>
-          </button>
+          {/* Interactive Start/Timer Ring */}
+          <div className="focus-hero__ring-container">
+            {hasActiveCard ? (
+              <div className="focus-hero__ring focus-hero__ring--active" onClick={() => void handlePrimaryAction()}>
+                <svg
+                  height={circleRadius * 2}
+                  width={circleRadius * 2}
+                  className="progress-ring"
+                >
+                  <circle
+                    stroke="rgba(255,255,255,0.05)"
+                    fill="transparent"
+                    strokeWidth={circleStroke}
+                    r={circleNormalizedRadius}
+                    cx={circleRadius}
+                    cy={circleRadius}
+                  />
+                  <circle
+                    stroke={phase === 'focus' ? '#3b82f6' : '#10b981'}
+                    fill="transparent"
+                    strokeWidth={circleStroke}
+                    strokeDasharray={circleCircumference + ' ' + circleCircumference}
+                    style={{ strokeDashoffset }}
+                    strokeLinecap="round"
+                    className="progress-ring__circle"
+                    r={circleNormalizedRadius}
+                    cx={circleRadius}
+                    cy={circleRadius}
+                  />
+                </svg>
+                <div className="ring-content">
+                  <div className={`phase-label ${phase}`}>{phase === 'focus' ? 'ENFOQUE' : 'DESCANSO'}</div>
+                  <div className="time-display">{mmss}</div>
+                  <div className="status-label">{isRunning ? 'Pausar' : 'Reanudar'}</div>
+                </div>
+              </div>
+            ) : (
+              <button className="focus-hero__circle" onClick={(e) => { e.stopPropagation(); onStartFocus(displayCard); }} aria-label="Iniciar enfoque">
+                <div className="focus-hero__circle-inner">INICIAR</div>
+              </button>
+            )}
+          </div>
 
           <div className="focus-hero__meta">
-            <span>{sortedQueue.length} tareas activas</span>
-            <span>{highPriorityCount} prioridad alta</span>
+            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> {sortedQueue.length} activas</span>
+            {highPriorityCount > 0 && <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> {highPriorityCount} urgentes</span>}
           </div>
 
-          <div className="focus-hero__actions">
-            <button className="focus-action" onClick={() => onEditCard(heroCard)}>
-              Editar
-            </button>
-          </div>
         </section>
       ) : (
         <section className="focus-empty">

@@ -8,67 +8,90 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: #0b101a;
+  background-color: #000000;
+  /* Fondo negro profundo */
   color: #fff;
 }
 
-.focus-view__ambient {
-  display: none;
+/* Sleep Window Bar */
+.focus-view__sleep-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  /* 1px puede verse muy tenue en resoluciones altas, usamos 2px */
+  background: rgba(255, 255, 255, 0.05);
+  z-index: 10;
+}
+
+.focus-view__sleep-bar-inner {
+  height: 100%;
+  transition: width 1s ease, background-color 1s ease;
 }
 
 .focus-view__topbar {
   width: 100%;
   max-width: 480px;
-  /* Igual que el contenedor central */
   z-index: 2;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  /* Alinear a la izquierda para el look asimétrico */
-  gap: 12px;
+  justify-content: flex-end;
   margin-bottom: 24px;
 }
 
-.focus-chip {
-  /* Ancho dinámico basado en contenido o porcentajes para dar asimetría del mockup */
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.topbar-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.icon-btn {
   background: rgba(255, 255, 255, 0.03);
-  color: #dde6f3;
-  border-radius: 999px;
-  /* Píldora redondeada como en el mockup */
-  padding: 10px 24px;
-  /* Padding interno más amplio horizontal */
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-/* Forzar tamaños diferentes (asimetría del mockup superior) */
-.focus-view__topbar>button:nth-child(1) {
-  width: 90%;
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
-.focus-view__topbar>button:nth-child(2) {
-  width: 45%;
+.icon-btn--ok {
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
-.focus-chip:hover {
-  background: rgba(255, 255, 255, 0.06);
+.icon-btn--danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
-.focus-chip:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.icon-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #000;
 }
 
-.focus-chip--ok {
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.2);
-}
-
-.focus-session,
 .focus-hero,
 .focus-empty {
   position: relative;
@@ -76,211 +99,56 @@
   width: 100%;
   max-width: 480px;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  background: #111620;
-  padding: 32px 24px;
-}
-
-.focus-session {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-  text-align: center;
-}
-
-.focus-session__phase {
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.focus-session__phase.focus {
-  color: #7bc0ff;
-}
-
-.focus-session__phase.break {
-  color: #8af0bf;
-}
-
-.focus-session__time {
-  margin: 0;
-  font-size: clamp(4.2rem, 14vw, 8.6rem);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  line-height: 0.9;
-}
-
-.focus-session__progress {
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.focus-session__progress span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #3b82f6;
-  transition: width 0.35s ease;
-}
-
-.focus-session__title {
-  margin: 8px 0 0;
-  font-size: 1.6rem;
-  line-height: 1.3;
-  font-weight: 700;
-}
-
-.focus-session__description {
-  max-width: 100%;
-  color: #94a3b8;
-  line-height: 1.55;
-  font-size: 0.95rem;
-}
-
-.focus-session__meta {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.focus-session__presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-.preset-button {
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.preset-button--active {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-}
-
-.focus-session__actions,
-.focus-hero__actions {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.focus-action {
-  width: 100%;
-  border-radius: 999px;
-  /* Pill como en el wireframe */
-  background: #1a202c;
-  color: #e2e8f0;
-  padding: 16px;
-  /* Botón alto */
-  font-size: 15px;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.focus-action:hover {
-  opacity: 0.9;
-}
-
-.focus-action--primary {
-  background: #3b82f6;
-  border-color: #2563eb;
-  color: #ffffff;
-}
-
-.focus-action--danger {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.1);
-  color: #f87171;
-}
-
-.focus-hero {
+  border-radius: 20px;
+  background: #0a0a0c;
+  padding: 40px 24px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  user-select: none;
 }
 
-/* El gran circulo central del mockup (Botón Iniciar Enfoque) */
-.focus-hero__circle {
-  width: 220px;
-  height: 220px;
+/* Score Indicator */
+.focus-hero__score {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(47, 122, 225, 0.92), rgba(66, 148, 255, 0.82));
-  border: 2px solid rgba(92, 163, 255, 0.6);
-  box-shadow: 0 16px 40px rgba(47, 122, 225, 0.25), inset 0 2px 10px rgba(255, 255, 255, 0.2);
-  margin: 16px 0;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+  font-weight: 700;
+  font-size: 13px;
   display: flex;
-  justify-content: center;
   align-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-  position: relative;
-  overflow: hidden;
+  justify-content: center;
 }
 
-.focus-hero__circle::after {
-  content: "INICIAR";
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: #fff;
-  opacity: 0.9;
-}
-
-.focus-hero__circle:hover {
-  transform: scale(1.04);
-  background: linear-gradient(135deg, rgba(56, 134, 242, 0.98), rgba(76, 158, 255, 0.92));
-  box-shadow: 0 20px 50px rgba(47, 122, 225, 0.4), inset 0 2px 10px rgba(255, 255, 255, 0.3);
-}
-
-.focus-hero__circle:active {
-  transform: scale(0.96);
-  box-shadow: 0 8px 20px rgba(47, 122, 225, 0.2);
-}
-
-.focus-hero__kicker {
+.focus-hero__project {
   display: inline-block;
-  padding: 8px 32px;
-  border-radius: 999px;
-  /* Pill superior */
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
   font-size: 11px;
+  font-weight: 600;
   color: #64748b;
-  width: auto;
+  margin-bottom: 12px;
+}
+
+.focus-hero__project--invisible {
+  visibility: hidden;
 }
 
 .focus-hero__title {
-  margin: 0;
-  font-size: 2.2rem;
+  margin: 0 0 24px;
+  font-size: clamp(2.2rem, 6vw, 2.8rem);
   line-height: 1.15;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
 }
 
@@ -289,109 +157,176 @@
   color: #94a3b8;
   line-height: 1.5;
   font-size: 0.95rem;
+  margin-bottom: 24px;
 }
 
+/* Glowing Start Button */
+.focus-hero__ring-container {
+  margin: 24px 0 40px;
+  position: relative;
+}
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 24px rgba(59, 130, 246, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.focus-hero__circle {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: pulse-glow 3s infinite;
+}
+
+.focus-hero__circle-inner {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #fff;
+}
+
+.focus-hero__circle:hover {
+  transform: scale(1.05);
+}
+
+.focus-hero__circle:active {
+  transform: scale(0.95);
+}
+
+/* Timer Ring */
+.focus-hero__ring {
+  width: 220px;
+  height: 220px;
+  position: relative;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.focus-hero__ring:active {
+  transform: scale(0.98);
+}
+
+.progress-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: rotate(-90deg);
+}
+
+.progress-ring__circle {
+  transition: stroke-dashoffset 1s linear;
+}
+
+.ring-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+}
+
+.phase-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.phase-label.focus {
+  color: #3b82f6;
+}
+
+.phase-label.break {
+  color: #10b981;
+}
+
+.time-display {
+  font-size: clamp(3.2rem, 10vw, 4.4rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+}
+
+.status-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 8px;
+}
+
+/* Meta Data */
 .focus-hero__meta {
   display: flex;
   flex-direction: row;
-  /* Elementos lado a lado según wireframe */
   justify-content: center;
   width: 100%;
-  gap: 12px;
+  gap: 16px;
 }
 
 .focus-hero__meta span {
-  flex: 1;
-  /* Ocupan la mitad del ancho cada uno */
-  display: block;
-  border-radius: 999px;
-  /* Aspecto pill estirado */
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
+  font-weight: 500;
+  color: #64748b;
 }
 
 .focus-empty {
-  text-align: center;
+  justify-content: center;
+  min-height: 400px;
 }
 
 .focus-empty h2 {
   margin: 0;
   font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 800;
 }
 
 .focus-empty p {
-  margin: 8px 0 0;
-  color: #9eb0c8;
+  margin: 12px 0 0;
+  color: #64748b;
 }
 
 @media (max-width: 900px) {
   .focus-view {
-    padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
     justify-content: center;
-    /* Mantener centrado vertical si sobra espacio */
   }
 
   .focus-view__topbar {
     margin-top: 0;
     margin-bottom: 24px;
     width: 100%;
-    /* No sobreescribir los nth-child(1) y (2) para mantener la asimetría */
   }
 
-  .focus-session,
   .focus-hero,
   .focus-empty {
     width: 100%;
-    padding: 24px 20px;
-    border-radius: 16px;
-  }
-
-  /* Escalar la bola de enfoque para móviles pequeños si hace falta */
-  .focus-hero__circle {
-    width: 190px;
-    height: 190px;
-    margin: 8px 0;
-  }
-
-  .focus-hero__circle::after {
-    font-size: 1.2rem;
-  }
-
-  .focus-hero__title {
-    font-size: 1.8rem;
-  }
-
-  .focus-hero__meta {
-    flex-direction: column;
-    /* Apilar stats en móvil muy estrecho, o lado a lado si caben */
-    gap: 8px;
-  }
-
-  .focus-hero__meta span {
-    width: 100%;
-    flex: none;
-    /* Resetear el flex: 1 del escritorio */
-  }
-
-  .focus-hero__actions {
-    width: 100%;
-    max-width: 440px;
-    gap: 12px;
-  }
-
-  .focus-session__meta {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px 12px;
-  }
-
-  .focus-action {
-    width: 100%;
-    min-height: 52px;
+    padding: 32px 20px;
   }
 }
