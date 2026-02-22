@@ -259,9 +259,9 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
             </div>
           )}
 
-          <div className="focus-hero__circle">
+          <button className="focus-hero__circle" onClick={() => onStartFocus(heroCard)} aria-label="Iniciar enfoque">
             <div className="focus-hero__circle-inner"></div>
-          </div>
+          </button>
 
           <div className="focus-hero__meta">
             <span>{sortedQueue.length} tareas activas</span>
@@ -269,9 +269,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           </div>
 
           <div className="focus-hero__actions">
-            <button className="focus-action focus-action--primary" onClick={() => onStartFocus(heroCard)}>
-              Iniciar enfoque
-            </button>
             <button className="focus-action" onClick={() => onEditCard(heroCard)}>
               Editar
             </button>
