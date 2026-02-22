@@ -217,6 +217,7 @@
 .focus-hero {
   text-align: center;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 24px;
 }
@@ -329,75 +330,51 @@
 
 @media (max-width: 900px) {
   .focus-view {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    gap: 14px;
-    padding:
-      calc(env(safe-area-inset-top, 0px) + 14px) 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    justify-content: center;
+    /* Mantener centrado vertical si sobra espacio */
   }
 
   .focus-view__topbar {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    flex-direction: column;
-    align-items: stretch;
+    margin-top: 0;
+    margin-bottom: 24px;
     width: 100%;
-    gap: 10px;
-  }
-
-  .focus-view__topbar-right {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: 8px;
-  }
-
-  .focus-view__topbar-right .focus-chip {
-    width: auto;
-    min-height: 42px;
-    padding-inline: 14px;
-  }
-
-  .focus-chip {
-    min-height: 42px;
-    padding: 10px 14px;
-    font-size: 14px;
+    /* No sobreescribir los nth-child(1) y (2) para mantener la asimetría */
   }
 
   .focus-session,
   .focus-hero,
   .focus-empty {
+    width: 100%;
+    padding: 24px 20px;
     border-radius: 16px;
-    width: min(680px, 100%);
-    margin-inline: auto;
-    padding: 22px 18px 20px;
-    margin: 0;
   }
 
-  .focus-hero {
-    gap: 14px;
+  /* Escalar la bola de enfoque para móviles pequeños si hace falta */
+  .focus-hero__circle {
+    width: 190px;
+    height: 190px;
+    margin: 8px 0;
+  }
+
+  .focus-hero__circle::after {
+    font-size: 1.2rem;
   }
 
   .focus-hero__title {
-    font-size: clamp(1.85rem, 9.2vw, 2.45rem);
-    max-width: 12ch;
+    font-size: 1.8rem;
   }
 
   .focus-hero__meta {
-    width: auto;
-    gap: 10px;
-    justify-content: center;
+    flex-direction: column;
+    /* Apilar stats en móvil muy estrecho, o lado a lado si caben */
+    gap: 8px;
   }
 
   .focus-hero__meta span {
-    flex: 0 1 auto;
-    min-width: 148px;
-    padding: 7px 12px;
-    text-align: center;
+    width: 100%;
+    flex: none;
+    /* Resetear el flex: 1 del escritorio */
   }
 
   .focus-hero__actions {
