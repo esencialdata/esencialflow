@@ -56,6 +56,7 @@ def download():
             'quiet': False, # Changed to False to see progress in terminal
             'no_warnings': False,
             'nocheckcertificate': True, # Fix for macOS SSL errors
+            'ignoreerrors': True,
         }
         
         # Explicitly tell yt-dlp where ffmpeg is if we found it

@@ -1,0 +1,324 @@
+{
+    "board": {
+        "id": "wHnviEY6gwIFvnMEPlNR",
+        "name": "Qualister · Tareas solicitadas (imported)",
+        "description": "Tablero con las tareas solicitadas (papelería, logo/branding, web y legal).",
+        "ownerId": "cKTELmypYphvr3wIJOSZrFFhQOp1",
+        "memberIds": [
+            "local-default",
+            "cKTELmypYphvr3wIJOSZrFFhQOp1"
+        ],
+        "visibility": "private",
+        "priority": "medium",
+        "ownerEmail": "aaron@esencial.work",
+        "createdAt": {
+            "_seconds": 1761742054,
+            "_nanoseconds": 85000000
+        },
+        "updatedAt": {
+            "_seconds": 1761742054,
+            "_nanoseconds": 85000000
+        }
+    },
+    "lists": [
+        {
+            "id": "JNFTyNFfgBN2eyGaCslj",
+            "name": "Web",
+            "position": 2,
+            "boardId": "wHnviEY6gwIFvnMEPlNR",
+            "createdAt": {
+                "_seconds": 1761742054,
+                "_nanoseconds": 476000000
+            },
+            "updatedAt": {
+                "_seconds": 1761742054,
+                "_nanoseconds": 476000000
+            },
+            "cards": [
+                {
+                    "id": "L8h2V5q81J38uM9QG5wS",
+                    "title": "Web: landing page básica",
+                    "description": "Estructura principal (Home, Servicios, Contacto). Diseño limpio y profesional.",
+                    "listId": "JNFTyNFfgBN2eyGaCslj",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 0,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 305000000
+                    },
+                    "dueDate": {
+                        "_seconds": 1763532000,
+                        "_nanoseconds": 0
+                    },
+                    "priority": "medium",
+                    "updatedAt": {
+                        "_seconds": 1763518616,
+                        "_nanoseconds": 63000000
+                    },
+                    "_listName": "Web"
+                },
+                {
+                    "id": "jzjki6k7BQXxBHIFaO9y",
+                    "title": "Web: incluir radiofrecuencia",
+                    "description": "Agregar 'Radiofrecuencia' a la lista de servicios con su iconografía/imagen y descripción correspondiente.",
+                    "listId": "JNFTyNFfgBN2eyGaCslj",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 1,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 377000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 377000000
+                    },
+                    "_listName": "Web"
+                },
+                {
+                    "id": "hr5uoK371BwKA1syoc2g",
+                    "title": "Web: actualizar imágenes de magnitudes",
+                    "description": "1) Agregar color a las imágenes de cada magnitud. 2) En la magnitud 'Dimensional', cambiar la imagen por una regla.",
+                    "listId": "JNFTyNFfgBN2eyGaCslj",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 2,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 445000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 445000000
+                    },
+                    "_listName": "Web"
+                }
+            ]
+        },
+        {
+            "id": "OErPxeRrAtjA9HatYeVN",
+            "name": "Laboratorio",
+            "position": 5,
+            "boardId": "wHnviEY6gwIFvnMEPlNR",
+            "createdAt": {
+                "_seconds": 1761742240,
+                "_nanoseconds": 551000000
+            },
+            "updatedAt": {
+                "_seconds": 1761742240,
+                "_nanoseconds": 551000000
+            },
+            "cards": [
+                {
+                    "id": "hiSsTFLgV20QCytuV79s",
+                    "createdAt": "2025-10-29T12:48:37.633Z",
+                    "attachments": [],
+                    "priority": "high",
+                    "listId": "OErPxeRrAtjA9HatYeVN",
+                    "position": 0,
+                    "title": "Paredes",
+                    "assignedToUserId": "cKTELmypYphvr3wIJOSZrFFhQOp1",
+                    "dueDate": {
+                        "_seconds": 1763618400,
+                        "_nanoseconds": 0
+                    },
+                    "updatedAt": {
+                        "_seconds": 1763612148,
+                        "_nanoseconds": 164000000
+                    },
+                    "_listName": "Laboratorio"
+                },
+                {
+                    "id": "CM6N1Wm7NgdsAw1kFwcv",
+                    "title": "Ventanas",
+                    "position": 1,
+                    "listId": "OErPxeRrAtjA9HatYeVN",
+                    "priority": "medium",
+                    "assignedToUserId": "cKTELmypYphvr3wIJOSZrFFhQOp1",
+                    "createdAt": "2025-10-29T12:51:23.000Z",
+                    "attachments": [],
+                    "dueDate": {
+                        "_seconds": 1763704800,
+                        "_nanoseconds": 0
+                    },
+                    "updatedAt": {
+                        "_seconds": 1763657062,
+                        "_nanoseconds": 432000000
+                    },
+                    "_listName": "Laboratorio"
+                },
+                {
+                    "id": "6V5l0owZ5UC9Eds9DPld",
+                    "title": "Oficina",
+                    "position": 2,
+                    "listId": "OErPxeRrAtjA9HatYeVN",
+                    "assignedToUserId": "cKTELmypYphvr3wIJOSZrFFhQOp1",
+                    "createdAt": "2025-10-29T12:51:29.000Z",
+                    "attachments": [],
+                    "actualTime": 390,
+                    "priority": "high",
+                    "dueDate": {
+                        "_seconds": 1763704800,
+                        "_nanoseconds": 0
+                    },
+                    "updatedAt": {
+                        "_seconds": 1763657039,
+                        "_nanoseconds": 542000000
+                    },
+                    "_listName": "Laboratorio"
+                }
+            ]
+        },
+        {
+            "id": "jkDvt7YUY1uYK3yuZ4fU",
+            "name": "Hecho",
+            "position": 5,
+            "boardId": "wHnviEY6gwIFvnMEPlNR",
+            "createdAt": {
+                "_seconds": 1763420959,
+                "_nanoseconds": 508000000
+            },
+            "updatedAt": {
+                "_seconds": 1763420959,
+                "_nanoseconds": 508000000
+            },
+            "cards": [
+                {
+                    "id": "RZEtdNzaaDuRcWqVGMSS",
+                    "title": "Hoja membretada",
+                    "description": "Diseñar plantilla de hoja membretada según identidad de marca.",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 0,
+                    "createdAt": "2025-10-29T12:47:34.000Z",
+                    "attachments": [],
+                    "dueDate": {
+                        "_seconds": 1763359200,
+                        "_nanoseconds": 0
+                    },
+                    "priority": "medium",
+                    "completed": true,
+                    "listId": "jkDvt7YUY1uYK3yuZ4fU",
+                    "completedAt": "2025-11-17T23:09:19.508Z",
+                    "updatedAt": {
+                        "_seconds": 1763420959,
+                        "_nanoseconds": 920000000
+                    },
+                    "_listName": "Hecho"
+                }
+            ]
+        },
+        {
+            "id": "u9vAcC7JUC6l2HomMzrZ",
+            "name": "Hecho",
+            "position": 5,
+            "boardId": "wHnviEY6gwIFvnMEPlNR",
+            "createdAt": {
+                "_seconds": 1763420958,
+                "_nanoseconds": 75000000
+            },
+            "updatedAt": {
+                "_seconds": 1763420958,
+                "_nanoseconds": 75000000
+            },
+            "cards": []
+        },
+        {
+            "id": "ycBRxDbHXD2W7osQcnqW",
+            "name": "Logo / Branding",
+            "boardId": "wHnviEY6gwIFvnMEPlNR",
+            "position": 1,
+            "createdAt": {
+                "_seconds": 1761742054,
+                "_nanoseconds": 418000000
+            },
+            "updatedAt": {
+                "_seconds": 1761742054,
+                "_nanoseconds": 418000000
+            },
+            "cards": [
+                {
+                    "id": "4yAcnzksI0w0wBpYSig1",
+                    "title": "Logo para uniformes (en curvas)",
+                    "description": "Entregar archivo vectorial en curvas, apto para bordado/serigrafía.",
+                    "listId": "ycBRxDbHXD2W7osQcnqW",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 0,
+                    "createdAt": {
+                        "_seconds": 1761742054,
+                        "_nanoseconds": 952000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742054,
+                        "_nanoseconds": 952000000
+                    },
+                    "_listName": "Logo / Branding"
+                },
+                {
+                    "id": "EGVMgnrfu5iUiSRspZVw",
+                    "title": "Logo para WhatsApp",
+                    "description": "Versión optimizada para perfil y fondo oscuro/claro.",
+                    "listId": "ycBRxDbHXD2W7osQcnqW",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 1,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 23000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 23000000
+                    },
+                    "_listName": "Logo / Branding"
+                },
+                {
+                    "id": "nxVvGzapzzFWmpGVtUe2",
+                    "title": "Fondo de pantalla",
+                    "description": "Fondos en varias resoluciones con el logo.",
+                    "listId": "ycBRxDbHXD2W7osQcnqW",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 2,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 96000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 96000000
+                    },
+                    "_listName": "Logo / Branding"
+                },
+                {
+                    "id": "6syRI6wvMYbILD8T6q19",
+                    "title": "Lista de códigos de colores",
+                    "description": "Entregar paleta (Pantone, CMYK, RGB, HEX).",
+                    "listId": "ycBRxDbHXD2W7osQcnqW",
+                    "assignedToUserId": "local-default",
+                    "estimatedTime": 0,
+                    "actualTime": 0,
+                    "position": 3,
+                    "createdAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 165000000
+                    },
+                    "updatedAt": {
+                        "_seconds": 1761742055,
+                        "_nanoseconds": 165000000
+                    },
+                    "_listName": "Logo / Branding"
+                }
+            ]
+        }
+    ]
+}

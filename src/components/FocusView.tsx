@@ -98,12 +98,12 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const notificationLabel = requiresIOSInstall
     ? 'iPhone: agregar a inicio'
     : notificationPermission === 'granted'
-    ? 'Notificaciones activas'
-    : notificationPermission === 'denied'
-      ? 'Notificaciones bloqueadas'
-      : notificationPermission === 'unsupported'
-        ? 'No soportado por navegador'
-        : 'Activar notificaciones';
+      ? 'Notificaciones activas'
+      : notificationPermission === 'denied'
+        ? 'Notificaciones bloqueadas'
+        : notificationPermission === 'unsupported'
+          ? 'No soportado por navegador'
+          : 'Activar notificaciones';
 
   useEffect(() => {
     const handlePomodoroNotify = (event: Event) => {
@@ -182,21 +182,18 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         <button className="focus-chip" onClick={() => setQueueOpen(true)}>
           Cola ({queueForModal.length})
         </button>
-
-        <div className="focus-view__topbar-right">
-          {hasActiveCard && (
-            <button className="focus-chip focus-chip--ghost" onClick={() => void handleFinishSession()}>
-              Cerrar sesión
-            </button>
-          )}
-          <button
-            className={`focus-chip ${notificationPermission === 'granted' ? 'focus-chip--ok' : ''}`}
-            onClick={handleRequestPermission}
-            disabled={notificationPermission === 'granted'}
-          >
-            {notificationLabel}
+        {hasActiveCard && (
+          <button className="focus-chip focus-chip--ghost" onClick={() => void handleFinishSession()}>
+            Cerrar sesión
           </button>
-        </div>
+        )}
+        <button
+          className={`focus-chip ${notificationPermission === 'granted' ? 'focus-chip--ok' : ''}`}
+          onClick={handleRequestPermission}
+          disabled={notificationPermission === 'granted'}
+        >
+          {notificationLabel}
+        </button>
       </header>
 
       {hasActiveCard ? (
