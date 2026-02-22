@@ -259,10 +259,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
             </div>
           )}
 
+          <div className="focus-hero__circle">
+            <div className="focus-hero__circle-inner"></div>
+          </div>
+
           <div className="focus-hero__meta">
             <span>{sortedQueue.length} tareas activas</span>
             <span>{highPriorityCount} prioridad alta</span>
-            {heroCard.dueDate && <span>Vence {new Date(heroCard.dueDate).toLocaleDateString()}</span>}
           </div>
 
           <div className="focus-hero__actions">
