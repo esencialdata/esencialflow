@@ -274,11 +274,11 @@
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
-    gap: 12px;
+    gap: 14px;
     padding:
-      calc(env(safe-area-inset-top, 0px) + 12px)
-      12px
-      calc(env(safe-area-inset-bottom, 0px) + 14px);
+      calc(env(safe-area-inset-top, 0px) + 14px)
+      16px
+      calc(env(safe-area-inset-bottom, 0px) + 20px);
   }
 
   .focus-view__topbar {
@@ -289,27 +289,25 @@
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    gap: 8px;
+    gap: 10px;
   }
 
   .focus-view__topbar-right {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     gap: 8px;
   }
 
   .focus-view__topbar-right .focus-chip {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .focus-view__topbar-right .focus-chip:only-child {
-    grid-column: 1 / -1;
+    width: auto;
+    min-height: 42px;
+    padding-inline: 14px;
   }
 
   .focus-chip {
-    min-height: 44px;
+    min-height: 42px;
+    padding: 10px 14px;
     font-size: 14px;
   }
 
@@ -317,32 +315,49 @@
   .focus-hero,
   .focus-empty {
     border-radius: 16px;
-    width: 100%;
-    padding: 20px 16px;
+    width: min(680px, 100%);
+    margin-inline: auto;
+    padding: 22px 18px 20px;
     margin: 0;
   }
 
+  .focus-hero {
+    gap: 14px;
+  }
+
   .focus-hero__title {
-    font-size: clamp(1.9rem, 10vw, 2.5rem);
+    font-size: clamp(1.85rem, 9.2vw, 2.45rem);
+    max-width: 12ch;
   }
 
   .focus-hero__meta {
-    width: 100%;
-    gap: 8px;
+    width: auto;
+    gap: 10px;
+    justify-content: center;
   }
 
   .focus-hero__meta span {
-    flex: 1 1 calc(50% - 8px);
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 148px;
+    padding: 7px 12px;
     text-align: center;
   }
 
+  .focus-hero__actions {
+    width: 100%;
+    max-width: 440px;
+    gap: 12px;
+  }
+
   .focus-session__meta {
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 12px;
   }
 
   .focus-action {
     width: 100%;
+    min-height: 52px;
   }
 }
