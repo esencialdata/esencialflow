@@ -81,7 +81,7 @@ ${strategyContext}
     const outputText = geminiResponse.text || "{}";
     const parsedData = JSON.parse(outputText);
 
-    // 4. Logic: Hard Math Score Calculation & Energy State
+    // 4. Logic: Hard Math Score Calculation & Energy State (Determinista v5.0)
     const energy = parsedData.energy_level !== undefined ? Number(parsedData.energy_level) : 10;
     let pF = parsedData.f_impact || 0;
     let pA = parsedData.leverage || 0;
@@ -90,7 +90,17 @@ ${strategyContext}
     let projectId = parsedData.project_id || 'PRJ-NONE';
     let title = parsedData.title || 'Nueva Tarea Obtenida';
 
-    // Formula: Score = ((f_impact * 0.35) + (leverage * 0.30) + (urgency * 0.15) + (vital_impact * 0.20))
+    // Regla de PRJ-VITAL Exclusiva (Si energía < 5)
+    if (energy < 5) {
+      title = 'Recuperar energía / Descanso vital';
+      projectId = 'PRJ-VITAL';
+      pF = 0;
+      pA = 100;
+      pU = 80;
+      pV = 100;
+    }
+
+    // Paso A: Score Base Formula
     const baseScore = (pF * 0.35) + (pA * 0.30) + (pU * 0.15) + (pV * 0.20);
 
     // Project Multipliers
@@ -100,46 +110,49 @@ ${strategyContext}
       'PRJ-ESENCIAL': 1.2,
       'PRJ-KUCHEN': 1.0
     };
-    
-    let rawFinalScore = baseScore * (multipliers[projectId] || 1.0);
-    const initialFinalScore = rawFinalScore;
+    const multiplier = multipliers[projectId] || 1.0;
 
-    // Energy Viability Logics
+    // Energy Requirements
     const projectEnergyRequirements: Record<string, number> = {
       'PRJ-QUAL-01': 7,
       'PRJ-KUCH-02': 8,
       'PRJ-MIGA-05': 9,
-      // Default aliases based on prompting just in case
       'PRJ-KUCHEN': 8,
       'PRJ-MIGA': 9,
-      'PRJ-VITAL': 2,
+      'PRJ-VITAL': 1, // PRJ-VITAL Req = 1
     };
-
     const energyReq = projectEnergyRequirements[projectId] || 7;
-    let isEnergyBlocked = false;
 
-    // Hard Block Energético
-    if (projectId !== 'PRJ-VITAL' && (energyReq - energy >= 3)) {
-      isEnergyBlocked = true;
-      rawFinalScore = 0; // Ensures it's pushed to the bottom/blocked
-    } else if (projectId !== 'PRJ-VITAL') {
-      // Cálculo de Viabilidad (V)
-      const viabilityV = energy / energyReq;
-      // Penalización Automática
-      rawFinalScore = rawFinalScore * viabilityV;
+    // Paso B: Factor de Viabilidad (Topado a 1.0)
+    let viabilityV = energy / energyReq;
+    if (viabilityV > 1.0) {
+      viabilityV = 1.0;
     }
 
-    // Prioridad Vital: si por baja energía un score que era decente se fue abajo de 50
-    if (projectId !== 'PRJ-VITAL' && initialFinalScore >= 50 && rawFinalScore < 50) {
-      // Forced replacement of the task to rest
-      title = 'Recuperar energía / Descanso vital';
-      projectId = 'PRJ-VITAL';
-      pF = 0; pA = 0; pU = 0; pV = 100;
-      rawFinalScore = 95;
-      isEnergyBlocked = false; // It's a new task, it's not blocked
+    let isEnergyBlocked = false;
+    let rawFinalScore = 0;
+
+    // Hard Block Energético vs Cálculo Normal
+    if (projectId !== 'PRJ-VITAL' && (energyReq - energy >= 3)) {
+      isEnergyBlocked = true;
+      rawFinalScore = 0;
+      viabilityV = 0; // Forced 0 for math steps
+    } else {
+      // Paso C: Penalización / Cálculo Final
+      rawFinalScore = baseScore * viabilityV * multiplier;
     }
 
     const finalScore = Math.min(Math.round(rawFinalScore), 100);
+
+    // Auditoría Matemática
+    const mathSteps = {
+      base_score_calc: `(${pF}*0.35) + (${pA}*0.30) + (${pU}*0.15) + (${pV}*0.20) = ${baseScore.toFixed(2)}`,
+      viability_factor: `min(${energy}/${energyReq}, 1.0) = ${viabilityV.toFixed(2)}`,
+      multiplier_applied: multiplier,
+      final_equation: `${baseScore.toFixed(2)} * ${viabilityV.toFixed(2)} * ${multiplier} = ${rawFinalScore.toFixed(2)}`,
+      computed_final_score: finalScore,
+      is_energy_blocked: isEnergyBlocked
+    };
 
     // 5. Logic: Hard Block de Sueño Server Time
     // Adjust logic to check local hours (you can pass the timezone offset if needed from client, or using basic JS Date assuming UTC or specific timezone implementation via timezone param). 
@@ -200,7 +213,8 @@ ${strategyContext}
       project_id: projectId,
       is_sleep_blocked: isSleepBlock,
       is_energy_blocked: isEnergyBlocked,
-      card_id: savedCard.id
+      card_id: savedCard.id,
+      math_steps: mathSteps
     };
 
     return new Response(JSON.stringify(strictUiResponse), {
