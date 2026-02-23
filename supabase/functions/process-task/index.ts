@@ -141,11 +141,11 @@ ${strategyContext}
       // Paso 2: Factor de Viabilidad V = min(Energia / Req, 1.0)
       const viability = Math.min(currentEnergy / calculatedReq, 1.0);
 
-      // Paso 3: Score Final = round(Base * V)
-      const rawFinalScore = Math.round(baseScore * viability);
+      // Paso 3: Score Final = min(round(Base * V), 100)
+      const rawFinalScore = Math.min(Math.round(baseScore * viability), 100);
 
       return {
-        score: rawFinalScore, // No cap - the math decides the score
+        score: rawFinalScore, // Capped at 100 per DB constraint
         calculatedReq: calculatedReq,
         viability: viability,
         mult: mult,
