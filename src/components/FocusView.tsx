@@ -45,6 +45,8 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const [smartInputText, setSmartInputText] = useState("");
   const [isSubmittingSmart, setIsSubmittingSmart] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [currentEnergy, setCurrentEnergy] = useState<number | null>(null);
+  const [isCompletingTask, setIsCompletingTask] = useState(false);
 
   // Long press for editing
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -152,6 +154,42 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     } catch (err) {
       console.error('Failed to toggle complete', err);
       showToast('No se pudo actualizar el estado de la tarea', 'error');
+    }
+  };
+
+  const handleCompleteTask = async (card: Card) => {
+    if (isCompletingTask) return;
+    setIsCompletingTask(true);
+    try {
+      const projectId = extractProject(card.description) || 'PRJ-NONE';
+      const res = await fetch('https://vqvfdqtzrnhsfeafwrua.supabase.co/functions/v1/complete-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_id: card.id,
+          project_id: projectId,
+          user_id: 'default_user'
+        })
+      });
+
+      if (!res.ok) throw new Error('Error al completar tarea');
+      const data = await res.json();
+
+      if (data.is_sleep_blocked) {
+        showToast('Bloqueo nocturno activo. ¡Excelente sesión! Descansa bien.', 'info', 5000);
+      } else {
+        const delta = (data.energy_delta || 0) > 0 ? `+${data.energy_delta}` : `${data.energy_delta}`;
+        showToast(`Tarea completada ✓  Energía: ${delta} → ${data.new_energy}/10`, 'success', 4000);
+        if (data.new_energy !== undefined) setCurrentEnergy(data.new_energy);
+      }
+
+      // Refresh board
+      await fetchCards('global');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al registrar el cierre de tarea.', 'error');
+    } finally {
+      setIsCompletingTask(false);
     }
   };
 
@@ -403,6 +441,23 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           <div className="focus-hero__meta">
             <span>Siguiente en cola: {sortedQueue.length - 1 > 0 ? sortedQueue.length - 1 : 0}</span>
             <span>Urgencia: {actualHero?.priority === 'high' ? 'Crítica' : actualHero?.priority === 'medium' ? 'Alta' : 'Normal'}</span>
+            {currentEnergy !== null && (
+              <span className="focus-hero__energy" title="Nivel de energía actual">
+                ⚡ {currentEnergy}/10
+              </span>
+            )}
+            <button
+              className="focus-hero__complete-btn"
+              onClick={() => void handleCompleteTask(actualHero as Card)}
+              disabled={isCompletingTask}
+              title="Marcar como completada"
+            >
+              {isCompletingTask ? '...' : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
             <button className="focus-hero__edit-discreet" onClick={() => onEditCard(actualHero as Card)} title="Editar tarea">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
