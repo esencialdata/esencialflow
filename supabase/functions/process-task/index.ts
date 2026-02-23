@@ -81,75 +81,71 @@ ${strategyContext}
     const outputText = geminiResponse.text || "{}";
     const parsedData = JSON.parse(outputText);
 
-    // 4. Logic: Hard Math Score Calculation & Energy State (Determinista v5.0)
+    // 4. Logic: Hard Math Score Calculation & Energy State (Exact Formula by User)
     const energy = parsedData.energy_level !== undefined ? Number(parsedData.energy_level) : 10;
-    let pF = parsedData.f_impact || 0;
-    let pA = parsedData.leverage || 0;
-    let pU = parsedData.urgency || 0;
-    let pV = parsedData.vital_impact || 0;
-    let projectId = parsedData.project_id || 'PRJ-NONE';
-    let title = parsedData.title || 'Nueva Tarea Obtenida';
-
+    
     // Regla de PRJ-VITAL Exclusiva (Si energía < 5)
     if (energy < 5) {
-      title = 'Recuperar energía / Descanso vital';
-      projectId = 'PRJ-VITAL';
-      pF = 0;
-      pA = 100;
-      pU = 80;
-      pV = 100;
+      parsedData.title = 'Recuperar energía / Descanso vital';
+      parsedData.project_id = 'PRJ-VITAL';
+      parsedData.f_impact = 0;
+      parsedData.leverage = 100;
+      parsedData.urgency = 80;
+      parsedData.vital_impact = 100;
     }
 
-    // Paso A: Score Base Formula
-    const baseScore = (pF * 0.35) + (pA * 0.30) + (pU * 0.15) + (pV * 0.20);
+    const pF = parsedData.f_impact || 0;
+    const pA = parsedData.leverage || 0;
+    const pU = parsedData.urgency || 0;
+    const pV = parsedData.vital_impact || 0;
+    const projectId = parsedData.project_id || 'PRJ-NONE';
+    const title = parsedData.title || 'Nueva Tarea Obtenida';
 
-    // Project Multipliers
-    const multipliers: Record<string, number> = {
-      'PRJ-VITAL': 2.0,
-      'PRJ-MIGA': 1.5,
-      'PRJ-ESENCIAL': 1.2,
-      'PRJ-KUCHEN': 1.0
-    };
-    const multiplier = multipliers[projectId] || 1.0;
+    function calculateScore(metrics: any, projectType: string, currentEnergy: number) {
+      // 1. Extraer pesos oficiales
+      const weights = { fin: 0.35, apal: 0.30, urg: 0.15, vit: 0.20 };
+      const multipliers: Record<string, number> = { 'PRJ-VITAL': 2.0, 'PRJ-MIGA': 1.5, 'PRJ-ESENCIAL': 1.2, 'PRJ-KUCHEN': 1.0 };
+      
+      // 2. Definir Requisitos de Energía
+      const energyReqs: Record<string, number> = { 'PRJ-MIGA': 9, 'PRJ-VITAL': 1, 'PRJ-KUCHEN': 8, 'PRJ-QUAL': 7 };
+      const calculatedReq = energyReqs[projectType] || 5;
 
-    // Energy Requirements
-    const projectEnergyRequirements: Record<string, number> = {
-      'PRJ-QUAL-01': 7,
-      'PRJ-KUCH-02': 8,
-      'PRJ-MIGA-05': 9,
-      'PRJ-KUCHEN': 8,
-      'PRJ-MIGA': 9,
-      'PRJ-VITAL': 1, // PRJ-VITAL Req = 1
-    };
-    const energyReq = projectEnergyRequirements[projectId] || 7;
+      // 3. Cálculo de Viabilidad (Penalización por Energía)
+      const viability = Math.min(currentEnergy / calculatedReq, 1.0);
 
-    // Paso B: Factor de Viabilidad (Topado a 1.0)
-    let viabilityV = energy / energyReq;
-    if (viabilityV > 1.0) {
-      viabilityV = 1.0;
+      // 4. Cálculo del Score Base con Multiplicador en Apalancamiento
+      const mult = multipliers[projectType] || 1.0;
+      const baseScore = (metrics.fin * weights.fin) + 
+                        (metrics.apal * weights.apal * mult) + 
+                        (metrics.urg * weights.urg) + 
+                        (metrics.vit * weights.vit);
+
+      // 5. Resultado Real
+      return {
+        score: Math.min(Math.round(baseScore * viability), 100),
+        calculatedReq: calculatedReq,
+        viability: viability,
+        mult: mult,
+        baseScore: baseScore
+      };
     }
+
+    const metrics = { fin: pF, apal: pA, urg: pU, vit: pV };
+    let { score: finalScore, calculatedReq: energyReq, viability, mult, baseScore } = calculateScore(metrics, projectId, energy);
 
     let isEnergyBlocked = false;
-    let rawFinalScore = 0;
 
     // Hard Block Energético vs Cálculo Normal
     if (projectId !== 'PRJ-VITAL' && (energyReq - energy >= 3)) {
       isEnergyBlocked = true;
-      rawFinalScore = 0;
-      viabilityV = 0; // Forced 0 for math steps
-    } else {
-      // Paso C: Penalización / Cálculo Final
-      rawFinalScore = baseScore * viabilityV * multiplier;
+      finalScore = 0; // Forced to 0 because blocked
     }
 
-    const finalScore = Math.min(Math.round(rawFinalScore), 100);
-
-    // Auditoría Matemática
+    // Auditoría Matemática Requerida
     const mathSteps = {
-      base_score_calc: `(${pF}*0.35) + (${pA}*0.30) + (${pU}*0.15) + (${pV}*0.20) = ${baseScore.toFixed(2)}`,
-      viability_factor: `min(${energy}/${energyReq}, 1.0) = ${viabilityV.toFixed(2)}`,
-      multiplier_applied: multiplier,
-      final_equation: `${baseScore.toFixed(2)} * ${viabilityV.toFixed(2)} * ${multiplier} = ${rawFinalScore.toFixed(2)}`,
+      base_score_formula: `(${pF}*0.35) + (${pA}*0.30*${mult}) + (${pU}*0.15) + (${pV}*0.20) = ${baseScore.toFixed(2)}`,
+      viability_factor: `min(${energy}/${energyReq}, 1.0) = ${viability.toFixed(2)}`,
+      final_equation: `round(${baseScore.toFixed(2)} * ${viability.toFixed(2)}) = ${finalScore}`,
       computed_final_score: finalScore,
       is_energy_blocked: isEnergyBlocked
     };
@@ -179,7 +175,7 @@ ${strategyContext}
       dueDate = tomorrow.toISOString();
     }
 
-    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${projectEnergyRequirements[projectId] || 7})\n\nOriginal: ${input_text}`;
+    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${energyReq})\n\nOriginal: ${input_text}`;
 
     // 6. Save directly to Supabase Public Cards table
     const newCardData = {
