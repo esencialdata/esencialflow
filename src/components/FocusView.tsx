@@ -20,7 +20,7 @@ const isIOSDevice = () => /iPad|iPhone|iPod/i.test(navigator.userAgent);
 const isStandalonePWA = () => window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
 const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard }) => {
-  const { cards, isLoading, error, handleUpdateCard } = useCards(boardId);
+  const { cards, isLoading, error, handleUpdateCard, fetchCards } = useCards(boardId);
   const {
     isRunning,
     activeCard,
@@ -176,7 +176,9 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
       showToast(`Tarea procesada. Score: S/${data.score}${data.sleep_blocked ? ' (Bloqueada por sueño)' : ''}`, 'success');
       setSmartInputText("");
-      // Real-time listener in useSupabaseCards will automatically sync the new card to UI
+
+      // Force UI reload immediately since Realtime subscription might delay or be disabled in dashboard
+      await fetchCards('global');
 
     } catch (err) {
       console.error(err);
