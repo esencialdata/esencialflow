@@ -59,6 +59,7 @@ Extrae estos 4 valores del 1 al 100 evaluando el texto dado el contexto de un CE
 - leverage: (Apalancamiento 1-100)
 - urgency: (Urgencia 1-100)
 - vital_impact: (Impacto Vital 1-100)
+- energy_level: (Nivel de energía del 1 al 10 inferido del texto. Usa 10 por defecto si no se menciona cansancio, salud o energía baja)
 
 También define:
 - project_id: si notas que pertenece a PRJ-VITAL, PRJ-MIGA, PRJ-ESENCIAL, PRJ-KUCHEN. Sino, usa "PRJ-NONE"
@@ -80,11 +81,24 @@ ${strategyContext}
     const outputText = geminiResponse.text || "{}";
     const parsedData = JSON.parse(outputText);
 
-    // 4. Logic: Hard Math Score Calculation
-    const pF = parsedData.f_impact || 0;
-    const pA = parsedData.leverage || 0;
-    const pU = parsedData.urgency || 0;
-    const pV = parsedData.vital_impact || 0;
+    // 4. Logic: Hard Math Score Calculation & Energy State
+    const energy = parsedData.energy_level !== undefined ? Number(parsedData.energy_level) : 10;
+    let pF = parsedData.f_impact || 0;
+    let pA = parsedData.leverage || 0;
+    let pU = parsedData.urgency || 0;
+    let pV = parsedData.vital_impact || 0;
+    let projectId = parsedData.project_id || 'PRJ-NONE';
+    let title = parsedData.title || 'Nueva Tarea Obtenida';
+
+    // Override if exhausted (energy < 5)
+    if (energy < 5) {
+      projectId = 'PRJ-VITAL';
+      title = 'Recuperar energía / Descanso vital';
+      pF = 0;
+      pA = 0;
+      pU = 0; // Prohibición de Datos Inventados (urgencia o financiero no se deben forzar)
+      pV = 100;
+    }
 
     // Formula: Score = ((f_impact * 0.35) + (leverage * 0.30) + (urgency * 0.15) + (vital_impact * 0.20))
     const baseScore = (pF * 0.35) + (pA * 0.30) + (pU * 0.15) + (pV * 0.20);
@@ -96,8 +110,17 @@ ${strategyContext}
       'PRJ-ESENCIAL': 1.2,
       'PRJ-KUCHEN': 1.0
     };
-    const projectId = parsedData.project_id || 'PRJ-NONE';
-    const rawFinalScore = baseScore * (multipliers[projectId] || 1.0);
+    
+    let rawFinalScore = baseScore * (multipliers[projectId] || 1.0);
+
+    // Apply exact UI output scaling based on energy context:
+    if (energy < 5) {
+       rawFinalScore = 95; // Force directly to P0 (95) so it commands attention to rest
+    } else if (projectId !== 'PRJ-VITAL' && energy < 10) {
+       // Penalización de No-Vitales: Multiplica Score final por (energia / 10)
+       rawFinalScore = rawFinalScore * (energy / 10);
+    }
+
     const finalScore = Math.min(Math.round(rawFinalScore), 100);
 
     // 5. Logic: Hard Block de Sueño Server Time
@@ -125,11 +148,11 @@ ${strategyContext}
       dueDate = tomorrow.toISOString();
     }
 
-    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV})\n\nOriginal: ${input_text}`;
+    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy})\n\nOriginal: ${input_text}`;
 
     // 6. Save directly to Supabase Public Cards table
     const newCardData = {
-      title: parsedData.title || 'Nueva Tarea Obtenida',
+      title: title,
       description: formattedDescription,
       list_id: 'inbox',
       priority: finalScore >= 90 ? 'high' : finalScore >= 60 ? 'medium' : 'low',
