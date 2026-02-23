@@ -42,6 +42,9 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   const [queueOpen, setQueueOpen] = useState(false);
   const [sleepProgress, setSleepProgress] = useState(0);
+  const [smartInputText, setSmartInputText] = useState("");
+  const [isSubmittingSmart, setIsSubmittingSmart] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   // Long press for editing
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -152,6 +155,72 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     }
   };
 
+  const handleSmartSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smartInputText.trim() || isSubmittingSmart) return;
+    setIsSubmittingSmart(true);
+
+    try {
+      const edgeFunctionUrl = 'https://vqvfdqtzrnhsfeafwrua.supabase.co/functions/v1/process-task';
+      const res = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}` // Ensure anon/service key is sent if JWT auth is enabled in supabase project, currently --no-verify-jwt is active.
+        },
+        body: JSON.stringify({ input_text: smartInputText })
+      });
+
+      if (!res.ok) throw new Error('Error processing with AI');
+      const data = await res.json();
+
+      showToast(`Tarea procesada. Score: S/${data.score}${data.sleep_blocked ? ' (Bloqueada por sueño)' : ''}`, 'success');
+      setSmartInputText("");
+      // Real-time listener in useSupabaseCards will automatically sync the new card to UI
+
+    } catch (err) {
+      console.error(err);
+      showToast('Hubo un error al procesar tu tarea estratégicamente.', 'error');
+    } finally {
+      setIsSubmittingSmart(false);
+    }
+  };
+
+  const startVoiceInput = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast('Tu navegador no soporta reconocimiento de voz.', 'error');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES'; // Default checking Spanish
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      showToast('Escuchando instrucción estratégica...', 'info', 2000);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setSmartInputText(prev => prev ? `${prev} ${transcript}` : transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+      showToast('Error al capturar audio.', 'error');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
   const handleRequestPermission = async () => {
     if (requiresIOSInstall) {
       showToast('En iPhone: comparte esta página y elige “Agregar a pantalla de inicio”. Luego activa notificaciones en esa app.', 'info', 6500);
@@ -195,8 +264,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     showToast('Sesión finalizada', 'info');
   };
 
-  const highPriorityCount = sortedQueue.filter(card => card.priority === 'high').length;
-
   if (isLoading) return <LoadingOverlay message="Sintonizando frecuencia..." />;
   if (error) return <div className="error-message">{error}</div>;
 
@@ -205,6 +272,12 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const score = displayCard ? extractScore(displayCard.description) : 0;
   const project = displayCard ? extractProject(displayCard.description) : null;
 
+  // Enforce P0 rule for Radical Focus
+  const isP0 = score >= 90;
+
+  // If not P0 and not an active running card, heroCard vanishes in favor of "Todo limpio"
+  const actualHero = (displayCard && isP0) || hasActiveCard ? displayCard : null;
+
   // Circular logic
   const circleRadius = 110;
   const circleStroke = 6;
@@ -212,6 +285,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const circleCircumference = circleNormalizedRadius * 2 * Math.PI;
   // Progress goes backwards as time dwindles so offset increases
   const strokeDashoffset = circleCircumference - (progressPercent / 100) * circleCircumference;
+
+  // Sleep Block logic
+  const now = new Date();
+  const currentHour = now.getHours();
+  const isSleepBlock = currentHour >= 21 || currentHour < 5;
 
   return (
     <div className={`focus-view ${hasActiveCard ? 'focus-view--active' : ''}`}>
@@ -244,18 +322,18 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         </div>
       </header>
 
-      {displayCard ? (
+      {actualHero && !isSleepBlock ? (
         <section
           className="focus-hero"
-          onMouseDown={() => handlePressStart(displayCard)}
+          onMouseDown={() => handlePressStart(actualHero)}
           onMouseUp={handlePressEnd}
           onMouseLeave={handlePressEnd}
-          onTouchStart={() => handlePressStart(displayCard)}
+          onTouchStart={() => handlePressStart(actualHero)}
           onTouchEnd={handlePressEnd}
         >
           {score > 0 && (
             <div className="focus-hero__score" title="Score Calculado">
-              {score}
+              S/{score}
             </div>
           )}
 
@@ -265,11 +343,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
             <span className="focus-hero__project focus-hero__project--invisible">PRJ-NONE</span>
           )}
 
-          <h1 className="focus-hero__title">{displayCard.title}</h1>
+          <h1 className="focus-hero__title">{actualHero.title}</h1>
 
-          {displayCard.description && !hasActiveCard && (
+          {actualHero.description && !hasActiveCard && (
             <div className="focus-hero__description">
-              <SmartDescription description={displayCard.description} compact maxLength={240} />
+              <SmartDescription description={actualHero.description} compact maxLength={240} />
             </div>
           )}
 
@@ -310,37 +388,72 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
                 </div>
               </div>
             ) : (
-              <button className="focus-hero__circle" onClick={(e) => { e.stopPropagation(); onStartFocus(displayCard); }} aria-label="Iniciar enfoque">
+              <button className="focus-hero__circle" onClick={(e) => { e.stopPropagation(); onStartFocus(actualHero as Card); }} aria-label="Iniciar enfoque">
                 <div className="focus-hero__circle-inner">INICIAR</div>
               </button>
             )}
           </div>
 
           <div className="focus-hero__meta">
-            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg> {sortedQueue.length} activas</span>
-            {highPriorityCount > 0 && <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> {highPriorityCount} urgentes</span>}
-            <button
-              className="focus-hero__edit-btn"
-              onClick={(e) => { e.stopPropagation(); onEditCard(displayCard); }}
-              title="Editar tarea"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            <span>Siguiente en cola: {sortedQueue.length - 1 > 0 ? sortedQueue.length - 1 : 0}</span>
+            <span>Urgencia: {actualHero?.priority === 'high' ? 'Crítica' : actualHero?.priority === 'medium' ? 'Alta' : 'Normal'}</span>
+            <button className="focus-hero__edit-discreet" onClick={() => onEditCard(actualHero as Card)} title="Editar tarea">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
             </button>
           </div>
 
         </section>
+      ) : isSleepBlock ? (
+        <section className="focus-empty">
+          <h2>Bloque de Sueño Activo</h2>
+          <p>La ejecución radical está bloqueada (21:00 - 05:00). Desconecta y recarga energía.</p>
+        </section>
       ) : (
         <section className="focus-empty">
           <h2>Todo limpio</h2>
-          <p>No hay tareas pendientes. Es un buen momento para planear lo próximo.</p>
+          <p>No hay tareas P0 (Score &gt;= 90). Refina tus prioridades o planifica la estrategia global.</p>
         </section>
       )}
 
+      {/* Smart Input (Always visible at bottom) */}
+      <form className="focus-smart-input-container" onSubmit={handleSmartSubmit}>
+        <button
+          type="button"
+          className={`focus-smart-voice-btn ${isListening ? 'listening' : ''}`}
+          onClick={startVoiceInput}
+          disabled={isSubmittingSmart}
+          title="Dictar tarea estratégicamente"
+        >
+          {isListening ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          )}
+        </button>
+
+        <input
+          type="text"
+          className="focus-smart-input"
+          placeholder="¿Qué tienes en mente? (Gemini lo evaluará...)"
+          value={smartInputText}
+          onChange={(e) => setSmartInputText(e.target.value)}
+          disabled={isSubmittingSmart}
+        />
+
+        <button type="submit" className="focus-smart-btn" disabled={!smartInputText.trim() || isSubmittingSmart}>
+          {isSubmittingSmart ? '...' : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
+        </button>
+      </form>
+
+      {/* Queue Modal */}
       <QueueModal
         isOpen={queueOpen}
         onClose={() => setQueueOpen(false)}
         queue={queueForModal}
-        onJumpTo={card => {
+        onJumpTo={(card: Card) => {
           onStartFocus(card);
           setQueueOpen(false);
         }}

@@ -4,6 +4,8 @@ import axios from 'axios';
 import * as admin from 'firebase-admin';
 import fs from 'fs';
 import path from 'path';
+import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 type ServiceAccountShape = {
   project_id?: string;
@@ -2048,3 +2050,156 @@ app.post('/api/boards/import', async (req, res) => {
   }
 });
 export default app;
+
+// --- Direct Gemini Strategy Integration (Esencial Flow v4.0) ---
+const geminiAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }); // Initialize Gemini SDK
+
+app.post('/api/gemini-task', async (req, res) => {
+  const authedReq = req as AuthedRequest;
+  const userId = getUserIdFromRequest(authedReq);
+  if (!ensureNonClientUser(authedReq, res)) return;
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const { input_text } = req.body;
+    if (!input_text || typeof input_text !== 'string') {
+      return res.status(400).json({ message: 'input_text is required' });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://vqvfdqtzrnhsfeafwrua.supabase.co';
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxdmZkcXR6cm5oc2ZlYWZ3cnVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3Mzc2MjAsImV4cCI6MjA4NjMxMzYyMH0.G_8Yw6GGhik9qvgh36dnjDTTrG5iy9Tei5_uA9Vb3JQ';
+    const supabaseCli = createClient(supabaseUrl, supabaseKey);
+
+    // 1. Convert input to vector (RAG) using text-embedding model
+    let strategyContext = "";
+    try {
+      const embeddingRes = await geminiAi.models.embedContent({
+        model: 'text-embedding-004',
+        contents: input_text,
+      });
+      const embedding = embeddingRes.embeddings?.[0]?.values;
+
+      if (embedding) {
+        // Query Supabase strategy vectors
+        const { data: strategies, error: rpcError } = await supabaseCli.rpc('match_strategy_vectors', {
+          query_embedding: embedding,
+          match_threshold: 0.7,
+          match_count: 3
+        });
+
+        if (!rpcError && strategies && strategies.length > 0) {
+          strategyContext = `\nREGLAS ESTRATÉGICAS APLICABLES V4.0:\n` + strategies.map((s: any) => `- ${s.content}`).join('\n');
+        }
+      }
+    } catch (embErr) {
+      console.warn("Could not retrieve strategy embeddings, proceeding with default behavior.", embErr);
+    }
+
+    // 2. Base System Instruction + Dynamic Strategies
+    const systemInstruction = `
+Eres un asistente experto en priorización radical. Analiza la petición del usuario y extrae la siguiente información en formato JSON puro.
+Extrae estos 4 valores del 1 al 100 evaluando el texto dado el contexto de un CEO:
+- impacto_financiero  (1-100)
+- apalancamiento (1-100)
+- urgencia (1-100)
+- impacto_vital (1-100)
+
+También define:
+- project: si notas que pertenece a PRJ-VITAL, PRJ-MIGA, PRJ-ESENCIAL, PRJ-KUCHEN. Sino, usa "PRJ-NONE"
+- title: un título conciso y procesable de la tarea.
+- estimated_time: en minutos (default 25).
+${strategyContext}
+    `;
+
+    // 3. Call Gemini
+    const geminiResponse = await geminiAi.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: input_text,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+      }
+    });
+
+    const outputText = geminiResponse.text || "{}";
+    const parsedData = JSON.parse(outputText);
+
+    // 3. Logic: Score Calculation
+    const pF = parsedData.impacto_financiero || 0;
+    const pA = parsedData.apalancamiento || 0;
+    const pU = parsedData.urgencia || 0;
+    const pV = parsedData.impacto_vital || 0;
+    const baseScore = (pF * 0.35) + (pA * 0.30) + (pU * 0.15) + (pV * 0.20);
+
+    // Project Multipliers
+    const multipliers: Record<string, number> = {
+      'PRJ-VITAL': 2.0,
+      'PRJ-MIGA': 1.5,
+      'PRJ-ESENCIAL': 1.2,
+      'PRJ-KUCHEN': 1.0
+    };
+    const project = parsedData.project || 'PRJ-NONE';
+    const finalScore = Math.min(Math.round(baseScore * (multipliers[project] || 1.0)), 100);
+
+    // 4. Logic: Hard Block de Sueño
+    const now = new Date();
+    const currentHour = now.getHours(); // Local server time, can adjust to timezone if needed
+    const isSleepBlock = currentHour >= 21 || currentHour < 5;
+
+    let dueDate = admin.firestore.FieldValue.serverTimestamp() as any;
+    if (isSleepBlock) {
+      // Forzar para mañana a las 06:00
+      const tomorrow = new Date(now);
+      if (currentHour >= 21) {
+        tomorrow.setDate(tomorrow.getDate() + 1);
+      }
+      tomorrow.setHours(6, 0, 0, 0);
+      dueDate = admin.firestore.Timestamp.fromDate(tomorrow);
+    }
+
+    // 5. Build Description and Save to Supabase via existing logic or Firestore to sync to Supabase
+    // Note: Since cards are currently in Supabase via edge frontend but this backend writes to Firestore?
+    // According to prior code, the Node backend writes to FIREBASE Firestore for cards.
+    // It seems there's a dual write or Supabase is only used loosely.
+    // Given the prompt "Usa Supabase para almacenar...", if cards table is in Supabase we should write to Postgres!
+    // But this backend currently uses admin.firestore(). We will format the description properly:
+
+    const formattedDescription = `[AI Generated]\nProject: ${project}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV})\n\nOriginal: ${input_text}`;
+
+    // 6. Save directly to Supabase since UI is reading from public.cards
+    const newCardData = {
+      title: parsedData.title || 'Nueva Tarea',
+      description: formattedDescription,
+      list_id: 'inbox', // Fallback to inbox queue
+      priority: finalScore >= 90 ? 'high' : finalScore >= 60 ? 'medium' : 'low',
+      due_date: isSleepBlock ? (dueDate.toDate ? dueDate.toDate().toISOString() : dueDate) : null,
+      assigned_to_user_id: userId,
+      estimated_time: parsedData.estimated_time || 25,
+      actual_time: 0,
+    };
+
+    const { data: savedCard, error: supaErr } = await supabaseCli
+      .from('cards')
+      .insert(newCardData)
+      .select()
+      .single();
+
+    if (supaErr) {
+      console.error("Error saving to Supabase:", supaErr);
+      return res.status(500).json({ error: "Failed to save card to Supabase", details: supaErr.message });
+    }
+
+    res.json({
+      message: "Card created successfully",
+      score: finalScore,
+      sleep_blocked: isSleepBlock,
+      card: savedCard
+    });
+
+  } catch (err: any) {
+    console.error("Gemini Error:", err);
+    res.status(500).json({ error: "Gemini Integration Failed", details: err.message });
+  }
+});

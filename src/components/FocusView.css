@@ -349,3 +349,76 @@
     padding: 32px 20px;
   }
 }
+.focus-smart-input-container {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 48px);
+  max-width: 500px;
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  padding: 6px;
+  backdrop-filter: blur(12px);
+  z-index: 10;
+}
+
+.focus-smart-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  padding: 8px 16px;
+  outline: none;
+}
+.focus-smart-input::placeholder {
+  color: rgba(255,255,255,0.3);
+}
+
+.focus-smart-btn {
+  border: none;
+  background: #3b82f6;
+  color: #fff;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.focus-smart-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+.focus-smart-voice-btn {
+  border: none;
+  background: transparent;
+  color: #fff;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.focus-smart-voice-btn.listening {
+  animation: pulse-red 1.5s infinite;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
