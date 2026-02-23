@@ -67,9 +67,9 @@ También define:
 ${strategyContext}
     `;
 
-    // 3. Call Gemini enforcing Strict JSON
+    // 3. Call Gemini
     const geminiResponse = await geminiAi.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       contents: input_text,
       config: {
         systemInstruction,
