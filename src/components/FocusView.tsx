@@ -171,9 +171,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     }
   };
 
-  const handleSmartSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!smartInputText.trim() || isSubmittingSmart) return;
+  const handleSmartSubmit = async (e?: React.FormEvent, overrideText?: string) => {
+    if (e) e.preventDefault();
+    const textToSubmit = overrideText !== undefined ? overrideText : smartInputText;
+
+    if (!textToSubmit.trim() || isSubmittingSmart) return;
     setIsSubmittingSmart(true);
 
     try {
@@ -220,14 +222,17 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
+    let finalTranscript = '';
+
     recognition.onstart = () => {
       setIsListening(true);
-      showToast('Escuchando instrucción estratégica...', 'info', 2000);
+      showToast('Escuchando...', 'info', 2000);
     };
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      setSmartInputText(prev => prev ? `${prev} ${transcript}` : transcript);
+      finalTranscript = transcript;
+      setSmartInputText(transcript); // Show it in the input briefly
     };
 
     recognition.onerror = (event: any) => {
@@ -238,6 +243,10 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
     recognition.onend = () => {
       setIsListening(false);
+      if (finalTranscript.trim()) {
+        showToast('Procesando instrucción...', 'info', 2000);
+        void handleSmartSubmit(undefined, finalTranscript);
+      }
     };
 
     recognition.start();
