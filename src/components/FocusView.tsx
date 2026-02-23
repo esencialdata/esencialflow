@@ -41,7 +41,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const requiresIOSInstall = isIOSDevice() && !isStandalonePWA();
 
   const [queueOpen, setQueueOpen] = useState(false);
-  const [sleepProgress, setSleepProgress] = useState(0);
   const [smartInputText, setSmartInputText] = useState("");
   const [isSubmittingSmart, setIsSubmittingSmart] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -51,28 +50,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   // Long press for editing
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    const updateSleepProgress = () => {
-      const now = new Date();
-      const hardBlock = new Date(now);
-      hardBlock.setHours(21, 0, 0, 0); // 21:00 target
 
-      const startOfDay = new Date(now);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const totalMs = hardBlock.getTime() - startOfDay.getTime();
-      const elapsedMs = now.getTime() - startOfDay.getTime();
-
-      let p = (elapsedMs / totalMs) * 100;
-      if (p > 100) p = 100;
-      if (p < 0) p = 0;
-      setSleepProgress(p);
-    };
-
-    updateSleepProgress();
-    const interval = setInterval(updateSleepProgress, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, []);
 
   const extractScore = (description?: string): number => {
     if (!description) return 0;
@@ -337,11 +315,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   return (
     <div className={`focus-view ${hasActiveCard ? 'focus-view--active' : ''}`}>
-      {/* Sleep Bar */}
-      <div className="focus-view__sleep-bar">
-        <div className="focus-view__sleep-bar-inner" style={{ width: `${sleepProgress}%`, backgroundColor: sleepProgress > 90 ? '#ef4444' : '#3b82f6' }} />
-      </div>
-
       <header className="focus-view__topbar">
         <div className="topbar-actions">
           <button className="icon-btn" onClick={() => setQueueOpen(true)} title={`Cola (${queueForModal.length})`}>
