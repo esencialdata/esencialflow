@@ -90,16 +90,6 @@ ${strategyContext}
     let projectId = parsedData.project_id || 'PRJ-NONE';
     let title = parsedData.title || 'Nueva Tarea Obtenida';
 
-    // Override if exhausted (energy < 5)
-    if (energy < 5) {
-      projectId = 'PRJ-VITAL';
-      title = 'Recuperar energía / Descanso vital';
-      pF = 0;
-      pA = 0;
-      pU = 0; // Prohibición de Datos Inventados (urgencia o financiero no se deben forzar)
-      pV = 100;
-    }
-
     // Formula: Score = ((f_impact * 0.35) + (leverage * 0.30) + (urgency * 0.15) + (vital_impact * 0.20))
     const baseScore = (pF * 0.35) + (pA * 0.30) + (pU * 0.15) + (pV * 0.20);
 
@@ -112,13 +102,41 @@ ${strategyContext}
     };
     
     let rawFinalScore = baseScore * (multipliers[projectId] || 1.0);
+    const initialFinalScore = rawFinalScore;
 
-    // Apply exact UI output scaling based on energy context:
-    if (energy < 5) {
-       rawFinalScore = 95; // Force directly to P0 (95) so it commands attention to rest
-    } else if (projectId !== 'PRJ-VITAL' && energy < 10) {
-       // Penalización de No-Vitales: Multiplica Score final por (energia / 10)
-       rawFinalScore = rawFinalScore * (energy / 10);
+    // Energy Viability Logics
+    const projectEnergyRequirements: Record<string, number> = {
+      'PRJ-QUAL-01': 7,
+      'PRJ-KUCH-02': 8,
+      'PRJ-MIGA-05': 9,
+      // Default aliases based on prompting just in case
+      'PRJ-KUCHEN': 8,
+      'PRJ-MIGA': 9,
+      'PRJ-VITAL': 2,
+    };
+
+    const energyReq = projectEnergyRequirements[projectId] || 7;
+    let isEnergyBlocked = false;
+
+    // Hard Block Energético
+    if (projectId !== 'PRJ-VITAL' && (energyReq - energy >= 3)) {
+      isEnergyBlocked = true;
+      rawFinalScore = 0; // Ensures it's pushed to the bottom/blocked
+    } else if (projectId !== 'PRJ-VITAL') {
+      // Cálculo de Viabilidad (V)
+      const viabilityV = energy / energyReq;
+      // Penalización Automática
+      rawFinalScore = rawFinalScore * viabilityV;
+    }
+
+    // Prioridad Vital: si por baja energía un score que era decente se fue abajo de 50
+    if (projectId !== 'PRJ-VITAL' && initialFinalScore >= 50 && rawFinalScore < 50) {
+      // Forced replacement of the task to rest
+      title = 'Recuperar energía / Descanso vital';
+      projectId = 'PRJ-VITAL';
+      pF = 0; pA = 0; pU = 0; pV = 100;
+      rawFinalScore = 95;
+      isEnergyBlocked = false; // It's a new task, it's not blocked
     }
 
     const finalScore = Math.min(Math.round(rawFinalScore), 100);
@@ -148,15 +166,16 @@ ${strategyContext}
       dueDate = tomorrow.toISOString();
     }
 
-    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy})\n\nOriginal: ${input_text}`;
+    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${projectEnergyRequirements[projectId] || 7})\n\nOriginal: ${input_text}`;
 
     // 6. Save directly to Supabase Public Cards table
     const newCardData = {
       title: title,
       description: formattedDescription,
-      list_id: 'inbox',
+      list_id: isEnergyBlocked ? 'queue' : 'inbox', 
       priority: finalScore >= 90 ? 'high' : finalScore >= 60 ? 'medium' : 'low',
       due_date: isSleepBlock ? dueDate : null,
+      status: isEnergyBlocked ? 'BLOCKED_BY_ENERGY' : 'PENDING',
       assigned_to_user_id: user_id, // ensure user_id is coming from JWT theoretically if using supabase auth 
       estimated_time: parsedData.estimated_time || 25,
       actual_time: 0,
@@ -180,6 +199,7 @@ ${strategyContext}
       priority: savedCard.priority,
       project_id: projectId,
       is_sleep_blocked: isSleepBlock,
+      is_energy_blocked: isEnergyBlocked,
       card_id: savedCard.id
     };
 

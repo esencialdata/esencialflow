@@ -174,7 +174,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
       if (!res.ok) throw new Error('Error processing with AI');
       const data = await res.json();
 
-      showToast(`Tarea procesada. Score: S/${data.score}${data.sleep_blocked ? ' (Bloqueada por sueño)' : ''}`, 'success');
+      let toastMsg = `Tarea procesada. Score: S/${data.score}`;
+      if (data.is_sleep_blocked) toastMsg += ' (Bloqueada por sueño)';
+      if (data.is_energy_blocked) toastMsg += ' [Baja Energía - Bloqueada]';
+
+      showToast(toastMsg, 'success');
       setSmartInputText("");
 
       // Force UI reload immediately since Realtime subscription might delay or be disabled in dashboard
