@@ -53,18 +53,23 @@ serve(async (req) => {
 
     // 2. Base System Instruction + Dynamic Strategies
     const systemInstruction = `
-Eres un asistente experto en priorización radical. Analiza la petición del usuario y extrae la siguiente información en estricto formato JSON puro.
-Extrae estos 4 valores del 1 al 100 evaluando el texto dado el contexto de un CEO:
-- f_impact: (Impacto Financiero 1-100)
-- leverage: (Apalancamiento 1-100)
-- urgency: (Urgencia 1-100)
-- vital_impact: (Impacto Vital 1-100)
-- energy_level: (Nivel de energía del 1 al 10 inferido del texto. Usa 10 por defecto si no se menciona cansancio, salud o energía baja)
+Eres un extractor de metadatos de tareas. Tu única función es analizar el texto provisto y retornar EXCLUSIVAMENTE un objeto JSON con los siguientes campos:
+- f_impact: (Impacto Financiero: cuánto impacta directamente en ingresos, del 1 al 100)
+- leverage: (Apalancamiento: cuánto escala este trabajo, del 1 al 100)
+- urgency: (Urgencia: cómo de urgente es en el tiempo, del 1 al 100)
+- vital_impact: (Impacto Vital: importancia para la salud, identidad o misión, del 1 al 100)
+- energy_level: (Nivel de energía del USUARIO, del 1 al 10. Si no se menciona, retorna 10)
+- project_id: EXACTAMENTE uno de estos valores: "T-QUAL-01", "T-KUCH-02", "T-MIGA-05", "PRJ-VITAL", "PRJ-NONE"
+  Reglas de asignación de project_id:
+   * "T-MIGA-05" si el texto menciona MIGA, MVP, landing MVP, beta, App Beta.
+   * "T-KUCH-02" si el texto menciona Kuchen, Kuchen Landing, kuchencl, la tienda de tortas.
+   * "T-QUAL-01" si el texto menciona Qualister, Manual de Marca, branding, identidad visual.
+   * "PRJ-VITAL" si el texto menciona descanso, dormir, recuperación, salud, sueño.
+   * "PRJ-NONE" si no encaja en ninguna de las anteriores.
+- title: un título conciso en formato 'Verbo Infinitivo + Objeto'. Máximo 7 palabras.
+- estimated_time: tiempo estimado en minutos (default 25).
 
-También define:
-- project_id: si notas que pertenece a PRJ-VITAL, PRJ-MIGA, PRJ-ESENCIAL, PRJ-KUCHEN. Sino, usa "PRJ-NONE"
-- title: un título conciso y accionable de la tarea (Verbo Infinitivo + Proyecto / Tarea).
-- estimated_time: en minutos (default 25).
+RESPONDE ÚNICAMENTE con el objeto JSON. No incluyas explicaciones ni texto adicional.
 ${strategyContext}
     `;
 
@@ -102,27 +107,45 @@ ${strategyContext}
     const title = parsedData.title || 'Nueva Tarea Obtenida';
 
     function calculateScore(metrics: any, projectType: string, currentEnergy: number) {
-      // 1. Extraer pesos oficiales
+      // 1. Pesos Oficiales (Invariables)
       const weights = { fin: 0.35, apal: 0.30, urg: 0.15, vit: 0.20 };
-      const multipliers: Record<string, number> = { 'PRJ-VITAL': 2.0, 'PRJ-MIGA': 1.5, 'PRJ-ESENCIAL': 1.2, 'PRJ-KUCHEN': 1.0 };
-      
-      // 2. Definir Requisitos de Energía
-      const energyReqs: Record<string, number> = { 'PRJ-MIGA': 9, 'PRJ-VITAL': 1, 'PRJ-KUCHEN': 8, 'PRJ-QUAL': 7 };
+
+      // 2. Multiplicadores por Proyecto (el multiplicador se aplica SOLO al apalancamiento)
+      const multipliers: Record<string, number> = {
+        'PRJ-VITAL': 2.0,
+        'T-MIGA-05': 1.5,
+        'T-KUCH-02': 1.0,
+        'T-QUAL-01': 1.2,
+        // Fallback aliases
+        'PRJ-MIGA': 1.5, 'PRJ-ESENCIAL': 1.2, 'PRJ-KUCHEN': 1.0
+      };
+
+      // 3. Requisitos de Energía por Tarea (Datos de n8n, INVARIABLES)
+      const energyReqs: Record<string, number> = {
+        'T-QUAL-01': 7,
+        'T-KUCH-02': 8,
+        'T-MIGA-05': 9,
+        'PRJ-VITAL': 1,
+        // Fallback aliases
+        'PRJ-MIGA': 9, 'PRJ-KUCHEN': 8, 'PRJ-QUAL': 7
+      };
       const calculatedReq = energyReqs[projectType] || 5;
 
-      // 3. Cálculo de Viabilidad (Penalización por Energía)
-      const viability = Math.min(currentEnergy / calculatedReq, 1.0);
-
-      // 4. Cálculo del Score Base con Multiplicador en Apalancamiento
+      // Paso 1: Score Base
       const mult = multipliers[projectType] || 1.0;
-      const baseScore = (metrics.fin * weights.fin) + 
-                        (metrics.apal * weights.apal * mult) + 
-                        (metrics.urg * weights.urg) + 
+      const baseScore = (metrics.fin * weights.fin) +
+                        (metrics.apal * weights.apal * mult) +
+                        (metrics.urg * weights.urg) +
                         (metrics.vit * weights.vit);
 
-      // 5. Resultado Real
+      // Paso 2: Factor de Viabilidad V = min(Energia / Req, 1.0)
+      const viability = Math.min(currentEnergy / calculatedReq, 1.0);
+
+      // Paso 3: Score Final = round(Base * V)
+      const rawFinalScore = Math.round(baseScore * viability);
+
       return {
-        score: Math.min(Math.round(baseScore * viability), 100),
+        score: rawFinalScore, // No cap - the math decides the score
         calculatedReq: calculatedReq,
         viability: viability,
         mult: mult,
@@ -141,13 +164,14 @@ ${strategyContext}
       finalScore = 0; // Forced to 0 because blocked
     }
 
-    // Auditoría Matemática Requerida
-    const mathSteps = {
-      base_score_formula: `(${pF}*0.35) + (${pA}*0.30*${mult}) + (${pU}*0.15) + (${pV}*0.20) = ${baseScore.toFixed(2)}`,
-      viability_factor: `min(${energy}/${energyReq}, 1.0) = ${viability.toFixed(2)}`,
-      final_equation: `round(${baseScore.toFixed(2)} * ${viability.toFixed(2)}) = ${finalScore}`,
-      computed_final_score: finalScore,
-      is_energy_blocked: isEnergyBlocked
+    // Auditoría Matemática Requerida (campo 'audit' como pedido en la especificación)
+    const audit = {
+      paso_1_base: `(${pF}×0.35) + (${pA}×0.30×${mult}) + (${pU}×0.15) + (${pV}×0.20) = ${baseScore.toFixed(2)}`,
+      paso_2_viabilidad: `V = min(${energy}/${energyReq}, 1.0) = ${viability.toFixed(3)}`,
+      paso_3_final: `Score_Final = round(${baseScore.toFixed(2)} × ${viability.toFixed(3)}) = ${finalScore}`,
+      is_p0: finalScore >= 90,
+      is_energy_blocked: isEnergyBlocked,
+      raw_inputs: { pF, pA, pU, pV, energy, energyReq }
     };
 
     // 5. Logic: Hard Block de Sueño Server Time
@@ -205,12 +229,13 @@ ${strategyContext}
     const strictUiResponse = {
       title: savedCard.title,
       score: finalScore,
+      is_p0: finalScore >= 90,
       priority: savedCard.priority,
       project_id: projectId,
       is_sleep_blocked: isSleepBlock,
       is_energy_blocked: isEnergyBlocked,
       card_id: savedCard.id,
-      math_steps: mathSteps
+      audit: audit
     };
 
     return new Response(JSON.stringify(strictUiResponse), {
