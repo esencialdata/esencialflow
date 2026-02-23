@@ -47,6 +47,10 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const [currentEnergy, setCurrentEnergy] = useState<number | null>(null);
   const [isCompletingTask, setIsCompletingTask] = useState(false);
 
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+
   // Long press for editing
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -171,22 +175,30 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     }
   };
 
-  const handleSmartSubmit = async (e?: React.FormEvent, overrideText?: string) => {
+  const handleSmartSubmit = async (e?: React.FormEvent, overrideText?: string, audioData?: string, audioMimeType?: string) => {
     if (e) e.preventDefault();
     const textToSubmit = overrideText !== undefined ? overrideText : smartInputText;
 
-    if (!textToSubmit.trim() || isSubmittingSmart) return;
+    // Allow submission if we have text OR we have audio data
+    if ((!textToSubmit.trim() && !audioData) || isSubmittingSmart) return;
     setIsSubmittingSmart(true);
 
     try {
       const edgeFunctionUrl = 'https://vqvfdqtzrnhsfeafwrua.supabase.co/functions/v1/process-task';
+
+      const payload: any = { input_text: textToSubmit };
+      if (audioData && audioMimeType) {
+        payload.audio_data = audioData;
+        payload.audio_mime_type = audioMimeType;
+      }
+
       const res = await fetch(edgeFunctionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}` // Ensure anon/service key is sent if JWT auth is enabled in supabase project, currently --no-verify-jwt is active.
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         },
-        body: JSON.stringify({ input_text: smartInputText })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) throw new Error('Error processing with AI');
@@ -210,46 +222,78 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     }
   };
 
-  const startVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      showToast('Tu navegador no soporta reconocimiento de voz.', 'error');
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          // Extract just the base64 part, e.g., "data:audio/webm;base64,......." -> "......."
+          const base64data = reader.result.split(',')[1];
+          resolve(base64data);
+        } else {
+          reject('Not a string');
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const startVoiceInput = async () => {
+    // If already recording, stop it
+    if (isListening && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsListening(false);
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES'; // Default checking Spanish
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    // Start recording
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('Tu navegador no soporta grabación de audio.', 'error');
+      return;
+    }
 
-    let finalTranscript = '';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
 
-    recognition.onstart = () => {
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks to release mic
+        stream.getTracks().forEach(track => track.stop());
+        setIsListening(false);
+
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+        if (audioBlob.size > 0) {
+          showToast('Procesando instrucción...', 'info', 2000);
+          try {
+            const base64Audio = await blobToBase64(audioBlob);
+            // Submit to the backend with the base64 audio exactly as Gemini expects
+            await handleSmartSubmit(undefined, "", base64Audio, mimeType);
+          } catch (e) {
+            console.error('Error converting audio to base64', e);
+            showToast('Error al procesar el audio.', 'error');
+          }
+        }
+        audioChunksRef.current = [];
+      };
+
+      mediaRecorder.start();
       setIsListening(true);
-      showToast('Escuchando...', 'info', 2000);
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      finalTranscript = transcript;
-      setSmartInputText(transcript); // Show it in the input briefly
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-      showToast('Error al capturar audio.', 'error');
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      if (finalTranscript.trim()) {
-        showToast('Procesando instrucción...', 'info', 2000);
-        void handleSmartSubmit(undefined, finalTranscript);
-      }
-    };
-
-    recognition.start();
+      showToast('Grabando instrucción...', 'info', 2000);
+    } catch (err) {
+      console.error('Error accessing microphone', err);
+      showToast('No se pudo acceder al micrófono.', 'error');
+    }
   };
 
   const handleRequestPermission = async () => {
