@@ -1,39 +1,45 @@
 :root {
-  /* Surface + background */
-  --color-bg: #0e1116;
-  --color-surface-1: #141821;
-  --color-surface-2: #1a1f2b;
-  --color-surface-3: #1f2532;
+  /* Surface + background (Premium Dark Mode) */
+  --color-bg: #050505;
+  --color-surface-1: rgba(15, 15, 20, 0.6);
+  --color-surface-2: rgba(25, 25, 30, 0.5);
+  --color-surface-3: rgba(35, 35, 45, 0.4);
 
   /* Text */
-  --color-text: #e8eef5;
-  --color-text-muted: #a6b0bf;
-  --color-text-dark: #e6ebf3;
+  --color-text: #f8fafc;
+  --color-text-muted: #64748b;
+  --color-text-dark: #94a3b8;
   --color-text-light: #ffffff;
 
   /* Borders & shadows */
-  --color-border: var(--color-surface-2);
-  --color-border-light: var(--color-surface-3);
-  --color-shadow-light: rgba(0, 0, 0, 0.25);
+  --color-border: rgba(255, 255, 255, 0.05);
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-shadow-light: rgba(0, 0, 0, 0.5);
 
   /* Accents */
-  --color-accent-green: #35d49a;
-  --color-accent-blue: #5ca3ff;
+  --color-accent-green: #10b981;
+  --color-accent-blue: #3b82f6;
   --color-accent-magenta: #d36bff;
 
   /* Cards */
   --color-background-card: var(--color-surface-1);
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
 body {
   margin: 0;
-  background: radial-gradient(1200px 800px at 80% -100px, #1a2030 0%, var(--color-bg) 55%);
+  /* Premium Deep Dark Mesh Background */
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.06) 0%, transparent 40%);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -55,17 +61,28 @@ button {
   cursor: pointer;
   transition: background 0.15s ease, transform 0.05s ease;
 }
-button:hover { background: #2a3242; }
-button:active { transform: translateY(1px); }
 
-input, select, textarea {
+button:hover {
+  background: #2a3242;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+input,
+select,
+textarea {
   background: var(--color-surface-2);
   color: var(--color-text);
   border: 1px solid var(--color-border-light);
   padding: 8px 10px;
   border-radius: 10px;
 }
-input::placeholder { color: var(--color-text-muted); }
+
+input::placeholder {
+  color: var(--color-text-muted);
+}
 
 .error-message {
   color: #ff8080;
@@ -73,13 +90,13 @@ input::placeholder { color: var(--color-text-muted); }
 
 
 /* Zen Mode Blur */
-body:has(.active-timer-overlay) #root > *:not(.active-timer-overlay) {
+body:has(.active-timer-overlay) #root>*:not(.active-timer-overlay) {
   filter: blur(5px) grayscale(80%);
   transition: filter 0.5s ease;
 }
 
 /* Fallback if :has not supported fully or structure differs, we can toggle class on body */
-.zen-mode-blur #root > *:not(.active-timer-overlay) {
+.zen-mode-blur #root>*:not(.active-timer-overlay) {
   filter: blur(5px) grayscale(80%);
 }
 
