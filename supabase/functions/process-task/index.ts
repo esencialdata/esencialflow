@@ -18,10 +18,10 @@ serve(async (req) => {
   }
 
   try {
-    const { input_text, user_id } = await req.json();
+    const { input_text, audio_data, audio_mime_type, user_id } = await req.json();
 
-    if (!input_text) {
-      return new Response(JSON.stringify({ error: "input_text is required" }), {
+    if (!input_text && !audio_data) {
+      return new Response(JSON.stringify({ error: "input_text or audio_data is required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400
       });
     }
@@ -73,10 +73,27 @@ RESPONDE ÚNICAMENTE con el objeto JSON. No incluyas explicaciones ni texto adic
 ${strategyContext}
     `;
 
-    // 3. Call Gemini
+    // 3. Prepare Content for Gemini (Text or Audio Multimodal)
+    const contents: any[] = [];
+    
+    // If audio is present, add the audio part
+    if (audio_data && audio_mime_type) {
+      contents.push({
+        inlineData: {
+          data: audio_data,
+          mimeType: audio_mime_type
+        }
+      });
+    }
+    
+    // Always add the text prompt
+    const promptText = input_text || "Por favor, analiza la siguiente nota de voz.";
+    contents.push(promptText);
+
+    // Call Gemini
     const geminiResponse = await geminiAi.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: input_text,
+      contents: contents,
       config: {
         systemInstruction,
         responseMimeType: "application/json",
@@ -106,55 +123,60 @@ ${strategyContext}
     const projectId = parsedData.project_id || 'PRJ-NONE';
     const title = parsedData.title || 'Nueva Tarea Obtenida';
 
-    function calculateScore(metrics: any, projectType: string, currentEnergy: number) {
-      // 1. Pesos Oficiales (Invariables)
+    // ─── LOOKUP en tabla projects (Estrategia v9) ──────────────────────────
+    // Si el project_id no existe, se usa PRJ-NONE como fallback (1.0x, energy_req=5)
+    // Inicializamos con los valores de fallback para evitar null checks
+    let projectData = { leverage_multiplier: 1.0, energy_req: 5, needs_strategic_review: true };
+    let needsStrategicReview = false;
+
+    const { data: projectRow, error: projectErr } = await supabase
+      .from('projects')
+      .select('leverage_multiplier, energy_req, needs_strategic_review')
+      .eq('project_id', projectId)
+      .maybeSingle();
+
+    if (projectErr) {
+      console.warn(`[projects] Error consultando project_id '${projectId}':`, projectErr.message);
+    }
+
+    if (projectRow) {
+      projectData = projectRow;
+      needsStrategicReview = projectRow.needs_strategic_review;
+    } else {
+      // Fallback: proyecto desconocido → PRJ-NONE (1.0x, energy_req=5)
+      console.warn(`[projects] project_id desconocido: '${projectId}'. Usando fallback PRJ-NONE.`);
+      needsStrategicReview = true;
+    }
+
+    function calculateScore(
+      metrics: { fin: number; apal: number; urg: number; vit: number },
+      mult: number,
+      energyReq: number,
+      currentEnergy: number
+    ) {
+      // Pesos Oficiales — Fórmula v9 (invariables)
+      // Score = (fin×0.35) + (apal×0.30×leverage_multiplier) + (urg×0.15) + (vit×0.20)
       const weights = { fin: 0.35, apal: 0.30, urg: 0.15, vit: 0.20 };
 
-      // 2. Multiplicadores por Proyecto (el multiplicador se aplica SOLO al apalancamiento)
-      const multipliers: Record<string, number> = {
-        'PRJ-VITAL': 2.0,
-        'T-MIGA-05': 1.5,
-        'T-KUCH-02': 1.0,
-        'T-QUAL-01': 1.2,
-        // Fallback aliases
-        'PRJ-MIGA': 1.5, 'PRJ-ESENCIAL': 1.2, 'PRJ-KUCHEN': 1.0
-      };
-
-      // 3. Requisitos de Energía por Tarea (Datos de n8n, INVARIABLES)
-      const energyReqs: Record<string, number> = {
-        'T-QUAL-01': 7,
-        'T-KUCH-02': 8,
-        'T-MIGA-05': 9,
-        'PRJ-VITAL': 1,
-        // Fallback aliases
-        'PRJ-MIGA': 9, 'PRJ-KUCHEN': 8, 'PRJ-QUAL': 7
-      };
-      const calculatedReq = energyReqs[projectType] || 5;
-
-      // Paso 1: Score Base
-      const mult = multipliers[projectType] || 1.0;
+      // Paso 1: Score Base con multiplicador desde la BD
       const baseScore = (metrics.fin * weights.fin) +
                         (metrics.apal * weights.apal * mult) +
                         (metrics.urg * weights.urg) +
                         (metrics.vit * weights.vit);
 
       // Paso 2: Factor de Viabilidad V = min(Energia / Req, 1.0)
-      const viability = Math.min(currentEnergy / calculatedReq, 1.0);
+      const viability = Math.min(currentEnergy / energyReq, 1.0);
 
-      // Paso 3: Score Final = min(round(Base * V), 100)
+      // Paso 3: Score Final = min(round(Base × V), 100)
       const rawFinalScore = Math.min(Math.round(baseScore * viability), 100);
 
-      return {
-        score: rawFinalScore, // Capped at 100 per DB constraint
-        calculatedReq: calculatedReq,
-        viability: viability,
-        mult: mult,
-        baseScore: baseScore
-      };
+      return { score: rawFinalScore, viability, mult, baseScore };
     }
 
-    const metrics = { fin: pF, apal: pA, urg: pU, vit: pV };
-    let { score: finalScore, calculatedReq: energyReq, viability, mult, baseScore } = calculateScore(metrics, projectId, energy);
+    const mult      = projectData.leverage_multiplier;
+    const energyReq = projectData.energy_req;
+    const metrics   = { fin: pF, apal: pA, urg: pU, vit: pV };
+    let { score: finalScore, viability, baseScore } = calculateScore(metrics, mult, energyReq, energy);
 
     let isEnergyBlocked = false;
 
@@ -199,7 +221,8 @@ ${strategyContext}
       dueDate = tomorrow.toISOString();
     }
 
-    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${energyReq})\n\nOriginal: ${input_text}`;
+    const strategicReviewFlag = needsStrategicReview ? '\n⚠️ Revisión Estratégica Pendiente: proyecto no reconocido en Estrategia v9.' : '';
+    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${energyReq}, Mult: ${mult}x)${strategicReviewFlag}\n\nOriginal: ${input_text}`;
 
     // 6. Save directly to Supabase Public Cards table
     const newCardData = {
