@@ -52,19 +52,35 @@ serve(async (req) => {
     }
 
     // 2. Base System Instruction + Dynamic Strategies
+    // Detectar hora local (GMT-6) para sugerir proyecto por bloque horario
+    const nowForBlock = new Date();
+    const localHourForBlock = (nowForBlock.getUTCHours() - 6 + 24) % 24;
+    let timeBlockHint = '';
+    if (localHourForBlock >= 5 && localHourForBlock < 6) {
+      timeBlockHint = '\nBLOQUE HORARIO ACTIVO: 05:00-06:00 = Ejercicio. Si el texto no menciona un proyecto específico, asigna "PRJ-VITAL".';
+    } else if (localHourForBlock >= 6 && localHourForBlock < 7) {
+      timeBlockHint = '\nBLOQUE HORARIO ACTIVO: 06:00-07:00 = Estudio. Si el texto no menciona un proyecto específico, asigna "PRJ-ESTUDIO".';
+    }
+
     const systemInstruction = `
 Eres un extractor de metadatos de tareas. Tu única función es analizar el texto provisto y retornar EXCLUSIVAMENTE un objeto JSON con los siguientes campos:
-- f_impact: (Impacto Financiero: cuánto impacta directamente en ingresos, del 1 al 100)
-- leverage: (Apalancamiento: cuánto escala este trabajo, del 1 al 100)
+- f_impact: (Impacto Financiero: cuánto impacta directamente en ingresos o flujo de caja, del 1 al 100.
+  REGLA: cualquier tarea de cliente activo = mínimo 60, porque los clientes son fuente directa de ingresos.)
+- leverage: (Apalancamiento: cuánto escala este trabajo o genera retorno futuro, del 1 al 100)
 - urgency: (Urgencia: cómo de urgente es en el tiempo, del 1 al 100)
-- vital_impact: (Impacto Vital: importancia para la salud, identidad o misión, del 1 al 100)
+- vital_impact: (Impacto Vital: importancia para la SUPERVIVENCIA DEL SISTEMA, del 1 al 100.
+  REGLA DE EVALUACIÓN — asigna alto (≥70) si:
+    * Impacta en salud personal, sueño o energía
+    * Perder el cliente o entregable implicaría pérdida de flujo de caja
+    * Es parte de la misión personal o identidad del CEO
+  Asigna bajo (<40) solo si es tarea rutinaria sin consecuencias de pérdida.)
 - energy_level: (Nivel de energía del USUARIO, del 1 al 10. Si no se menciona, retorna 10)
 - project_id: EXACTAMENTE uno de estos valores: "PRJ-MIGA", "PRJ-ESENCIAL", "PRJ-ES-KUCHEN", "PRJ-ES-QUINTA", "PRJ-ES-QUALISTER", "PRJ-ES-CHELITO", "PRJ-ESTUDIO", "PRJ-CREAMOS", "PRJ-VITAL", "PRJ-NONE"
   Reglas de asignación de project_id (en orden de prioridad, usar el PRIMERO que aplique):
    * "PRJ-VITAL"        → descanso, dormir, recuperación, salud, sueño, ejercicio, energía baja.
    * "PRJ-MIGA"         → MIGA, SaaS, MVP, landing MVP, beta, App Beta, producto propio.
    * "PRJ-ES-KUCHEN"    → Kuchen, kuchencl, tienda de tortas, pastelería Kuchen.
-   * "PRJ-ES-QUALISTER" → Qualister, Manual de Marca, branding Qualister, identidad visual, caso de estudio Esencial.
+   * "PRJ-ES-QUALISTER" → Qualister, Manual de Marca, branding Qualister, identidad visual.
    * "PRJ-ES-QUINTA"    → La Quinta, quinta, consultoria UX, service design.
    * "PRJ-ES-CHELITO"   → Chelito, Chelito de Montiel, panadería, marketing panadería.
    * "PRJ-ESENCIAL"     → Esencial Work, agencia, lead generation, propuesta comercial, cliente nuevo, caso de estudio.
@@ -73,11 +89,10 @@ Eres un extractor de metadatos de tareas. Tu única función es analizar el text
    * "PRJ-NONE"         → solo si NO encaja en ninguna de las anteriores.
 - title: un título conciso en formato 'Verbo Infinitivo + Objeto'. Máximo 7 palabras.
 - estimated_time: tiempo estimado en minutos (default 25).
-
+${timeBlockHint}
 RESPONDE ÚNICAMENTE con el objeto JSON. No incluyas explicaciones ni texto adicional.
 ${strategyContext}
     `;
-
     // 3. Prepare Content for Gemini (Text or Audio Multimodal)
     const contents: any[] = [];
     
@@ -234,7 +249,7 @@ ${strategyContext}
       title: title,
       description: formattedDescription,
       list_id: isEnergyBlocked ? 'queue' : 'inbox', 
-      priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : 'low',
+      priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : finalScore >= 50 ? 'low' : 'backlog',
       due_date: isSleepBlock ? dueDate : null,
       status: isEnergyBlocked ? 'BLOCKED_BY_ENERGY' : 'PENDING',
       assigned_to_user_id: user_id, // ensure user_id is coming from JWT theoretically if using supabase auth 
