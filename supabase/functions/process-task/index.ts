@@ -249,7 +249,7 @@ ${strategyContext}
       title: title,
       description: formattedDescription,
       list_id: isEnergyBlocked ? 'queue' : 'inbox', 
-      priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : finalScore >= 50 ? 'low' : 'backlog',
+      priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : 'low',
       due_date: isSleepBlock ? dueDate : null,
       status: isEnergyBlocked ? 'BLOCKED_BY_ENERGY' : 'PENDING',
       assigned_to_user_id: user_id, // ensure user_id is coming from JWT theoretically if using supabase auth 
