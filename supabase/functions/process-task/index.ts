@@ -59,13 +59,18 @@ Eres un extractor de metadatos de tareas. Tu única función es analizar el text
 - urgency: (Urgencia: cómo de urgente es en el tiempo, del 1 al 100)
 - vital_impact: (Impacto Vital: importancia para la salud, identidad o misión, del 1 al 100)
 - energy_level: (Nivel de energía del USUARIO, del 1 al 10. Si no se menciona, retorna 10)
-- project_id: EXACTAMENTE uno de estos valores: "T-QUAL-01", "T-KUCH-02", "T-MIGA-05", "PRJ-VITAL", "PRJ-NONE"
-  Reglas de asignación de project_id:
-   * "T-MIGA-05" si el texto menciona MIGA, MVP, landing MVP, beta, App Beta.
-   * "T-KUCH-02" si el texto menciona Kuchen, Kuchen Landing, kuchencl, la tienda de tortas.
-   * "T-QUAL-01" si el texto menciona Qualister, Manual de Marca, branding, identidad visual.
-   * "PRJ-VITAL" si el texto menciona descanso, dormir, recuperación, salud, sueño.
-   * "PRJ-NONE" si no encaja en ninguna de las anteriores.
+- project_id: EXACTAMENTE uno de estos valores: "PRJ-MIGA", "PRJ-ESENCIAL", "PRJ-ES-KUCHEN", "PRJ-ES-QUINTA", "PRJ-ES-QUALISTER", "PRJ-ES-CHELITO", "PRJ-ESTUDIO", "PRJ-CREAMOS", "PRJ-VITAL", "PRJ-NONE"
+  Reglas de asignación de project_id (en orden de prioridad, usar el PRIMERO que aplique):
+   * "PRJ-VITAL"        → descanso, dormir, recuperación, salud, sueño, ejercicio, energía baja.
+   * "PRJ-MIGA"         → MIGA, SaaS, MVP, landing MVP, beta, App Beta, producto propio.
+   * "PRJ-ES-KUCHEN"    → Kuchen, kuchencl, tienda de tortas, pastelería Kuchen.
+   * "PRJ-ES-QUALISTER" → Qualister, Manual de Marca, branding Qualister, identidad visual, caso de estudio Esencial.
+   * "PRJ-ES-QUINTA"    → La Quinta, quinta, consultoria UX, service design.
+   * "PRJ-ES-CHELITO"   → Chelito, Chelito de Montiel, panadería, marketing panadería.
+   * "PRJ-ESENCIAL"     → Esencial Work, agencia, lead generation, propuesta comercial, cliente nuevo, caso de estudio.
+   * "PRJ-ESTUDIO"      → Coursera, estudio, certificación, curso, aprendizaje, UX research.
+   * "PRJ-CREAMOS"      → Creamos Juntos, contenido, podcast, video, post, redes sociales, marca personal.
+   * "PRJ-NONE"         → solo si NO encaja en ninguna de las anteriores.
 - title: un título conciso en formato 'Verbo Infinitivo + Objeto'. Máximo 7 palabras.
 - estimated_time: tiempo estimado en minutos (default 25).
 
@@ -229,7 +234,7 @@ ${strategyContext}
       title: title,
       description: formattedDescription,
       list_id: isEnergyBlocked ? 'queue' : 'inbox', 
-      priority: finalScore >= 90 ? 'high' : finalScore >= 60 ? 'medium' : 'low',
+      priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : finalScore >= 50 ? 'low' : 'backlog',
       due_date: isSleepBlock ? dueDate : null,
       status: isEnergyBlocked ? 'BLOCKED_BY_ENERGY' : 'PENDING',
       assigned_to_user_id: user_id, // ensure user_id is coming from JWT theoretically if using supabase auth 
