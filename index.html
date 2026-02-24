@@ -7,6 +7,15 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Esencial Flow</title>
+  <script>
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      try {
+        window.resizeTo(450, 850);
+      } catch (e) {
+        console.warn('Resize failed', e);
+      }
+    }
+  </script>
 </head>
 
 <body>
