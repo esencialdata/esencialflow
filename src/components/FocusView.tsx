@@ -201,7 +201,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error('Error processing with AI');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: 'No parseable response' }));
+        console.error('[process-task] Error response:', errBody);
+        throw new Error(errBody?.error || 'Error processing with AI');
+      }
       const data = await res.json();
 
       let toastMsg = `Tarea procesada. Score: S/${data.score}`;
