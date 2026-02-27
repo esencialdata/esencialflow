@@ -63,6 +63,7 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const workerRef = useRef<Worker | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const phaseCompleteLockRef = useRef(false);
 
   const [activeCard, setActiveCard] = useState<Card | null>(null);
@@ -160,6 +161,12 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const unlockAudio = useCallback(async (): Promise<AudioContext | null> => {
     if (typeof window === 'undefined') return null;
 
+    if (!audioElRef.current) {
+      const audio = new Audio('/alarm.wav');
+      audio.preload = 'auto';
+      audioElRef.current = audio;
+    }
+
     const WebAudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (!WebAudioContext) return null;
 
@@ -177,6 +184,16 @@ export const PomodoroProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const playBeep = useCallback(async () => {
+    if (audioElRef.current) {
+      try {
+        audioElRef.current.currentTime = 0;
+        await audioElRef.current.play();
+        return;
+      } catch (error) {
+        console.warn('Failed to play alarm audio:', error);
+      }
+    }
+
     const ctx = await unlockAudio();
     if (!ctx) return;
 
