@@ -46,7 +46,11 @@ serve(async (request) => {
 
     if (isSleepBlock) {
       // Marcar la tarea como completada igualmente
-      await supabase.from('cards').update({ status: 'completed' }).eq('id', task_id);
+      await supabase.from('cards').update({ 
+        status: 'completed',
+        completed: true,
+        completed_at: now.toISOString()
+      }).eq('id', task_id);
       return new Response(JSON.stringify({
         next_task: null,
         new_energy: null,
@@ -60,7 +64,11 @@ serve(async (request) => {
     // 2. Marcar la tarea actual como completada
     const { error: completeErr } = await supabase
       .from('cards')
-      .update({ status: 'completed' })
+      .update({ 
+        status: 'completed',
+        completed: true,
+        completed_at: now.toISOString()
+      })
       .eq('id', task_id);
 
     if (completeErr) {
