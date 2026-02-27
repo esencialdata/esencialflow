@@ -37,6 +37,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     remainingSec,
     notificationPermission,
     start,
+    setPreset,
   } = usePomodoro();
   const { showToast } = useToast();
   const requiresIOSInstall = isIOSDevice() && !isStandalonePWA();
@@ -429,6 +430,23 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           {actualHero.description && !hasActiveCard && (
             <div className="focus-hero__description">
               <SmartDescription description={actualHero.description} compact maxLength={240} />
+            </div>
+          )}
+
+          {!isRunning && (
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreset(25, 5); }}
+                style={{ background: focusLen === 25 ? 'rgba(255,255,255,0.2)' : 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '16px', padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}
+              >25m</button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreset(50, 10); }}
+                style={{ background: focusLen === 50 ? 'rgba(255,255,255,0.2)' : 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '16px', padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}
+              >50m</button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreset(90, 15); }}
+                style={{ background: focusLen === 90 ? 'rgba(255,255,255,0.2)' : 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '16px', padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}
+              >90m</button>
             </div>
           )}
 
