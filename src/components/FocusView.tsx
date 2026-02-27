@@ -7,6 +7,8 @@ import QueueModal from './QueueModal';
 import SmartDescription from './SmartDescription';
 import { useToast } from '../context/ToastContext';
 import { supabase, supabaseKey } from '../config/supabase';
+import { selectQuoteForToday } from '../utils/quotes';
+import HabitsModal from './HabitsModal';
 import './FocusView.css';
 
 interface FocusViewProps {
@@ -43,11 +45,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const requiresIOSInstall = isIOSDevice() && !isStandalonePWA();
 
   const [queueOpen, setQueueOpen] = useState(false);
+  const [habitsOpen, setHabitsOpen] = useState(false);
   const [smartInputText, setSmartInputText] = useState("");
   const [isSubmittingSmart, setIsSubmittingSmart] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentEnergy, setCurrentEnergy] = useState<number | null>(null);
   const [isCompletingTask, setIsCompletingTask] = useState(false);
+  const dailyQuote = useMemo(() => selectQuoteForToday(), []);
 
   // Audio recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -382,6 +386,10 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     <div className={`focus-view ${hasActiveCard ? 'focus-view--active' : ''}`}>
       <header className="focus-view__topbar">
         <div className="topbar-actions">
+          <button className="icon-btn" onClick={() => setHabitsOpen(true)} title="Hábitos Diarios">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          </button>
+
           <button className="icon-btn" onClick={() => setQueueOpen(true)} title={`Cola (${queueForModal.length})`}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             <span className="icon-badge">{queueForModal.length}</span>
@@ -416,6 +424,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           {score > 0 && (
             <div className="focus-hero__score" title="Score Calculado">
               S/{score}
+            </div>
+          )}
+
+          {!hasActiveCard && (
+            <div className="focus-hero__daily-quote">
+              <p>&ldquo;{dailyQuote.text}&rdquo;</p>
+              <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
             </div>
           )}
 
@@ -524,11 +539,19 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         </section>
       ) : isSleepBlock ? (
         <section className="focus-empty">
+          <div className="focus-hero__daily-quote" style={{ marginBottom: '2rem' }}>
+            <p>&ldquo;{dailyQuote.text}&rdquo;</p>
+            <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
+          </div>
           <h2>Bloque de Sueño Activo</h2>
           <p>La ejecución radical está bloqueada (21:00 - 05:00). Desconecta y recarga energía.</p>
         </section>
       ) : (
         <section className="focus-empty">
+          <div className="focus-hero__daily-quote" style={{ marginBottom: '2rem' }}>
+            <p>&ldquo;{dailyQuote.text}&rdquo;</p>
+            <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
+          </div>
           <h2>Todo limpio</h2>
           <p>No hay tareas P0 (Score &gt;= 90). Refina tus prioridades o planifica la estrategia global.</p>
         </section>
@@ -575,6 +598,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         }}
         onToggleComplete={handleToggleComplete}
         onEdit={onEditCard}
+      />
+
+      {/* Habits Modal */}
+      <HabitsModal
+        isOpen={habitsOpen}
+        onClose={() => setHabitsOpen(false)}
+        userId={"global"} // user hook relies on API internally anyway, logic abstracted
       />
     </div>
   );
