@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useToast } from '../context/ToastContext';
 import Spinner from './Spinner';
 import { Attachment } from '../types/data';
-import { API_URL } from '../config/api';
-import { api } from '../config/http';
+import { supabase } from '../config/supabase';
 
 interface CardAttachmentsProps {
   cardId: string;
@@ -24,50 +23,26 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
     setError(null);
     setIsUploading(true);
     try {
-      // 1) Request signed URL
-      let signedUrl = '';
-      let filePath = '';
-      try {
-        const reqRes = await api.post(`${API_URL}/cards/${cardId}/request-upload-url`, {
-          fileName: file.name,
-          fileType: file.type || 'application/octet-stream',
-        });
-        ({ signedUrl, filePath } = reqRes.data as { signedUrl: string; filePath: string });
-      } catch (err: any) {
-        console.error('Error requesting signed URL', err);
-        const msg = err?.response?.data?.message || 'No se pudo generar URL de carga';
-        setError(msg);
-        return;
+      // 1) Generar un path unico
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+      const filePath = `${cardId}/${fileName}`;
+
+      // 2) Subir archivo al bucket de Supabase
+      const { error: uploadError } = await supabase.storage
+        .from('card_attachments')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
       }
 
-      // 2) Upload to GCS signed URL
-      try {
-        const putRes = await fetch(signedUrl, {
-          method: 'PUT',
-          body: file as any,
-        });
-        if (!putRes.ok) {
-          const txt = await putRes.text().catch(() => '');
-          throw new Error(`PUT failed ${putRes.status}: ${txt}`);
-        }
-      } catch (err: any) {
-        console.error('Error uploading to signed URL', err);
-        setError('No se pudo subir el archivo (CORS o permisos del bucket). Revisa la consola/Network.');
-        return;
-      }
+      // 3) Obtener URL publica
+      const { data: { publicUrl } } = supabase.storage
+        .from('card_attachments')
+        .getPublicUrl(filePath);
 
-      // Build public URL
-      let publicUrl = '';
-      try {
-        const u = new URL(signedUrl);
-        const parts = u.pathname.split('/').filter(Boolean);
-        const bucketName = parts[0];
-        publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-      } catch {
-        publicUrl = filePath;
-      }
-
-      // 3) Tell backend to attach to card
+      // 4) Actualizar registro de la tarjeta en la BD
       const attPayload: Attachment = {
         attachmentId: filePath,
         fileName: file.name,
@@ -75,21 +50,22 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
         fileType: file.type || 'application/octet-stream',
         createdAt: new Date().toISOString(),
       };
-      try {
-        const res = await api.post(`${API_URL}/cards/${cardId}/attachments`, attPayload);
-        const saved = res.data as Attachment;
-        onAttachmentsChange([...attachments, saved]);
-        showToast('Adjunto agregado', 'success');
-      } catch (err: any) {
-        console.error('Error attaching to card', err);
-        const msg = err?.response?.data?.message || 'No se pudo asociar el archivo a la tarjeta';
-        setError(msg);
-        showToast('No se pudo asociar el archivo', 'error');
-        return;
-      }
-    } catch (err) {
+
+      const newAttachments = [...attachments, attPayload];
+      const { error: dbError } = await supabase
+        .from('cards')
+        .update({ attachments: newAttachments })
+        .eq('id', cardId);
+
+      if (dbError) throw new Error(dbError.message);
+
+      onAttachmentsChange(newAttachments);
+      showToast('Adjunto agregado', 'success');
+
+    } catch (err: any) {
       console.error('Error uploading attachment', err);
-      setError('No se pudo subir el archivo');
+      setError(err.message || 'No se pudo subir el archivo');
+      showToast('No se pudo asociar el archivo', 'error');
     } finally {
       setIsUploading(false);
       e.target.value = '';
@@ -97,49 +73,46 @@ const CardAttachments: React.FC<CardAttachmentsProps> = ({ cardId, attachments, 
   };
 
   const openAttachment = async (a: Attachment) => {
-    try {
-      setOpening(a.attachmentId);
-      const params = new URLSearchParams({ filePath: a.attachmentId });
-      const res = await api.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
-      const url = res.data?.url || a.url;
-      window.open(url, '_blank', 'noopener');
-    } catch (err) {
-      console.error('Error getting signed READ URL, falling back to direct URL', err);
-      window.open(a.url, '_blank', 'noopener');
-    } finally {
-      setOpening(null);
-    }
+    setOpening(a.attachmentId);
+    window.open(a.url, '_blank', 'noopener');
+    setOpening(null);
   };
 
   const togglePreview = async (a: Attachment) => {
-    try {
-      if (previewUrl[a.attachmentId]) {
-        const next = { ...previewUrl };
-        delete next[a.attachmentId];
-        setPreviewUrl(next);
-        return;
-      }
-      const params = new URLSearchParams({ filePath: a.attachmentId });
-      const res = await api.get(`${API_URL}/cards/${cardId}/attachments/signed-read?${params.toString()}`);
-      const url = res.data?.url || a.url;
-      setPreviewUrl(prev => ({ ...prev, [a.attachmentId]: url }));
-    } catch (e) {
-      console.error('Error generating preview URL', e);
-      setError('No se pudo generar la vista previa');
+    if (previewUrl[a.attachmentId]) {
+      const next = { ...previewUrl };
+      delete next[a.attachmentId];
+      setPreviewUrl(next);
+      return;
     }
+    setPreviewUrl(prev => ({ ...prev, [a.attachmentId]: a.url }));
   };
 
   const deleteAttachment = async (a: Attachment) => {
     if (!confirm('¿Eliminar este adjunto?')) return;
     try {
-      await api.delete(`${API_URL}/cards/${cardId}/attachments/${encodeURIComponent(a.attachmentId)}`, { params: { deleteObject: true } });
+      // Borrar de storage
+      const { error: storageError } = await supabase.storage
+        .from('card_attachments')
+        .remove([a.attachmentId]);
+
+      if (storageError) console.error("Error borrar storage:", storageError.message);
+
+      // Borrar de Database
       const remaining = attachments.filter(x => x.attachmentId !== a.attachmentId);
+      const { error: dbError } = await supabase
+        .from('cards')
+        .update({ attachments: remaining })
+        .eq('id', cardId);
+
+      if (dbError) throw new Error(dbError.message);
+
       onAttachmentsChange(remaining);
       setError(null);
       showToast('Adjunto eliminado', 'success');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error deleting attachment', e);
-      setError('No se pudo eliminar el adjunto');
+      setError(e.message || 'No se pudo eliminar el adjunto');
       showToast('No se pudo eliminar el adjunto', 'error');
     }
   };
