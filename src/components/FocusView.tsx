@@ -6,7 +6,7 @@ import LoadingOverlay from './LoadingOverlay';
 import QueueModal from './QueueModal';
 import SmartDescription from './SmartDescription';
 import { useToast } from '../context/ToastContext';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseKey } from '../config/supabase';
 import './FocusView.css';
 
 interface FocusViewProps {
@@ -146,7 +146,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     try {
       const projectId = extractProject(card.description) || 'PRJ-NONE';
       const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token || '';
+      const token = sessionData?.session?.access_token || supabaseKey;
 
       const res = await fetch('https://vqvfdqtzrnhsfeafwrua.supabase.co/functions/v1/complete-task', {
         method: 'POST',
