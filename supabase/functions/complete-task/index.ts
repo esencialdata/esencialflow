@@ -146,8 +146,12 @@ serve(async (request) => {
     });
 
   } catch (err: any) {
-    console.error("Complete Task Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error("Complete Task Error Detailed:", {
+      message: err.message,
+      stack: err.stack,
+      details: err.details || err
+    });
+    return new Response(JSON.stringify({ error: err.message, details: err.details || err }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
