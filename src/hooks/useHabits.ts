@@ -1,70 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { HabitDailyStatus } from '../types/data';
 import { useToast } from '../context/ToastContext';
-import { API_URL } from '../config/api';
-import { api } from '../config/http';
-
-const parseDate = (value: any): Date | undefined => {
-  if (!value) return undefined;
-  if (value instanceof Date) return value;
-  if (typeof value === 'object') {
-    if (typeof value._seconds === 'number') return new Date(value._seconds * 1000);
-    if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
-  }
-  if (typeof value === 'string') {
-    const date = new Date(value);
-    return isNaN(date.getTime()) ? undefined : date;
-  }
-  if (typeof value === 'number') {
-    const date = new Date(value);
-    return isNaN(date.getTime()) ? undefined : date;
-  }
-  return undefined;
-};
-
-const buildDateKey = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
+import { supabase } from '../config/supabase';
 
 const toDateKey = (value?: Date | string): string => {
   if (!value) {
-    return buildDateKey(new Date());
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
   if (typeof value === 'string') {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const p = new Date(value);
+    if (!isNaN(p.getTime())) {
+      return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`;
     }
-    const parsed = new Date(value);
-    if (!isNaN(parsed.getTime())) {
-      return buildDateKey(parsed);
-    }
-    return buildDateKey(new Date());
   }
   if (value instanceof Date && !isNaN(value.getTime())) {
-    return buildDateKey(value);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
   }
-  return buildDateKey(new Date());
-};
-
-const normalizeHabit = (habit: any): HabitDailyStatus => {
-  const createdAt = parseDate(habit.createdAt) || habit.createdAt;
-  const updatedAt = parseDate(habit.updatedAt) || habit.updatedAt;
-  const completedAt = parseDate(habit.completedAt) || habit.completedAt || null;
-  return {
-    id: habit.id,
-    name: habit.name,
-    description: habit.description,
-    userId: habit.userId,
-    archived: habit.archived,
-    createdAt,
-    updatedAt,
-    date: habit.date,
-    completed: Boolean(habit.completed),
-    completedAt,
-  };
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 export const useHabits = (userId?: string, targetDate?: Date | string) => {
@@ -79,25 +34,59 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
   const dateKey = useMemo(() => toDateKey(targetDate), [targetDate]);
 
   const fetchDailyHabits = useCallback(async () => {
-    if (!userId) {
+    setIsLoading(true);
+    let uid = userId;
+    if (!uid || uid === 'global') {
+      const { data: { session } } = await supabase.auth.getSession();
+      uid = session?.user?.id;
+    }
+
+    if (!uid) {
       setHabits([]);
-      setError('Selecciona un usuario para ver hábitos');
+      setError('Debes iniciar sesión para ver hábitos');
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+
     try {
-      const response = await api.get(`${API_URL}/habits/daily`, {
-        params: {
+      // Fetch all active habits for user
+      const { data: activeHabits, error: habitsErr } = await supabase
+        .from('habits')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('archived', false)
+        .order('name');
+        
+      if (habitsErr) throw habitsErr;
+
+      // Fetch completions for the specific date
+      const { data: completions, error: compErr } = await supabase
+        .from('habit_completions')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('date', dateKey);
+
+      if (compErr) throw compErr;
+
+      const compsMap = new Map((completions || []).map(c => [c.habit_id, c]));
+
+      const payload: HabitDailyStatus[] = (activeHabits || []).map(h => {
+        const comp = compsMap.get(h.id);
+        return {
+          id: h.id,
+          name: h.name,
+          description: h.description,
+          userId: h.user_id,
+          archived: h.archived,
+          createdAt: new Date(h.created_at),
+          updatedAt: new Date(h.updated_at),
           date: dateKey,
-          userId,
-        },
+          completed: !!comp,
+          completedAt: comp ? new Date(comp.completed_at) : null,
+        };
       });
-      const habitsData = Array.isArray(response.data) ? response.data : [];
-      const normalized = habitsData
-        .map(normalizeHabit)
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setHabits(normalized);
+
+      setHabits(payload);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch daily habits', err);
@@ -118,17 +107,21 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
         showToast('El nombre del hábito es obligatorio', 'info');
         return false;
       }
-      if (!userId) {
-        showToast('Selecciona un usuario para crear hábitos', 'info');
-        return false;
-      }
       setIsCreating(true);
+      
+      let uid = userId;
+      if (!uid || uid === 'global') {
+        const { data: { session } } = await supabase.auth.getSession();
+        uid = session?.user?.id;
+      }
+
       try {
-        await api.post(`${API_URL}/habits`, {
+        const { error } = await supabase.from('habits').insert({
           name: trimmed,
           description: description?.trim() || '',
-          userId,
+          user_id: uid,
         });
+        if (error) throw error;
         await fetchDailyHabits();
         showToast('Hábito creado', 'success');
         return true;
@@ -150,18 +143,30 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
       if (!targetHabit) return false;
       const shouldComplete = typeof nextValue === 'boolean' ? nextValue : !targetHabit.completed;
       setPendingHabitId(habitId);
+      
+      let uid = userId;
+      if (!uid || uid === 'global') {
+        const { data: { session } } = await supabase.auth.getSession();
+        uid = session?.user?.id;
+      }
+
       try {
         if (shouldComplete) {
-          const response = await api.post(`${API_URL}/habits/${habitId}/check`, {
+          const { error } = await supabase.from('habit_completions').upsert({
+            habit_id: habitId,
+            user_id: uid,
             date: dateKey,
-            userId,
-          });
-          const completedAt = parseDate(response.data?.completedAt) || new Date();
+            completed_at: new Date().toISOString()
+          }, { onConflict: 'habit_id,date' });
+          if (error) throw error;
+          const completedAt = new Date();
           setHabits(prev => prev.map(h => (h.id === habitId ? { ...h, completed: true, completedAt } : h)));
         } else {
-          await api.delete(`${API_URL}/habits/${habitId}/check`, {
-            params: { date: dateKey, userId },
-          });
+          const { error } = await supabase.from('habit_completions').delete()
+            .eq('habit_id', habitId)
+            .eq('user_id', uid)
+            .eq('date', dateKey);
+          if (error) throw error;
           setHabits(prev => prev.map(h => (h.id === habitId ? { ...h, completed: false, completedAt: null } : h)));
         }
         setError(null);
@@ -187,10 +192,13 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
       }
       setUpdatingHabitId(habitId);
       try {
-        await api.put(`${API_URL}/habits/${habitId}`, {
+        const { error } = await supabase.from('habits').update({
           name: trimmed,
           description: description?.trim() || '',
-        });
+          updated_at: new Date().toISOString()
+        }).eq('id', habitId);
+        
+        if (error) throw error;
         await fetchDailyHabits();
         showToast('Hábito actualizado', 'success');
         return true;
@@ -210,8 +218,9 @@ export const useHabits = (userId?: string, targetDate?: Date | string) => {
     async (habitId: string): Promise<boolean> => {
       setUpdatingHabitId(habitId);
       try {
-        await api.delete(`${API_URL}/habits/${habitId}`);
-        setHabits(prev => prev.filter(h => h.id !== habitId));
+        const { error } = await supabase.from('habits').delete().eq('id', habitId);
+        if (error) throw error;
+        setHabits(prev => prev.map(h => h.id === habitId ? { ...h, archived: true } : h).filter(h => h.id !== habitId));
         showToast('Hábito eliminado', 'success');
         return true;
       } catch (err) {
