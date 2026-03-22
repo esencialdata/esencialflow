@@ -63,6 +63,7 @@ export interface Card {
   description?: string;
   listId: string;
   priority: 'low' | 'medium' | 'high';
+  status?: 'pending' | 'completed' | 'blocked';
   position?: number; // Orden dentro de la lista
   dueDate?: Date | string;
   completed?: boolean;

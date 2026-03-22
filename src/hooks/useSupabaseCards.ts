@@ -3,8 +3,22 @@ import { Card } from '../types/data';
 import { useToast } from '../context/ToastContext';
 import { supabase } from '../config/supabase';
 
+type CardStatus = 'pending' | 'completed' | 'blocked';
+
+const normalizeStatus = (value: unknown): CardStatus | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim().toLowerCase();
+  if (v === 'pending' || v === 'completed' || v === 'blocked') return v as CardStatus;
+  return undefined;
+};
+
+const deriveStatusFromCompleted = (completed: unknown): CardStatus => (completed ? 'completed' : 'pending');
+
 // Helper to map Supabase snake_case to App camelCase
 const mapFromSupabase = (record: any): Card => ({
+  // Keep both legacy boolean and new status field in sync so
+  // mobile/desktop clients can read/write consistently.
+  status: normalizeStatus(record.status) ?? deriveStatusFromCompleted(record.completed),
   id: record.id,
   title: record.title,
   description: record.description,
@@ -12,7 +26,7 @@ const mapFromSupabase = (record: any): Card => ({
   priority: record.priority,
   position: record.position,
   dueDate: record.due_date ? new Date(record.due_date) : undefined,
-  completed: record.completed,
+  completed: normalizeStatus(record.status) === 'completed' || Boolean(record.completed),
   completedAt: record.completed_at ? new Date(record.completed_at) : undefined,
   archived: record.archived,
   archivedAt: record.archived_at ? new Date(record.archived_at) : undefined,
@@ -28,13 +42,23 @@ const mapFromSupabase = (record: any): Card => ({
 // Helper to map App camelCase to Supabase snake_case
 const mapToSupabase = (card: Partial<Card>): any => {
   const payload: any = {};
+  const normalizedStatus = normalizeStatus((card as any).status);
+
   if (card.title !== undefined) payload.title = card.title;
   if (card.description !== undefined) payload.description = card.description;
   if (card.listId !== undefined) payload.list_id = card.listId;
   if (card.priority !== undefined) payload.priority = card.priority;
   if (card.position !== undefined) payload.position = card.position;
   if (card.dueDate !== undefined) payload.due_date = toSupabaseDate(card.dueDate);
-  if (card.completed !== undefined) payload.completed = card.completed;
+  if (normalizedStatus !== undefined) payload.status = normalizedStatus;
+  if (card.completed !== undefined) {
+    payload.completed = card.completed;
+    if (normalizedStatus === undefined) {
+      payload.status = deriveStatusFromCompleted(card.completed);
+    }
+  } else if (normalizedStatus !== undefined) {
+    payload.completed = normalizedStatus === 'completed';
+  }
   if (card.completedAt !== undefined) payload.completed_at = toSupabaseDate(card.completedAt);
   if (card.archived !== undefined) payload.archived = card.archived;
   if (card.archivedAt !== undefined) payload.archived_at = toSupabaseDate(card.archivedAt);
@@ -122,7 +146,15 @@ export const useCards = (_boardId: string | null) => {
         fetchCards('global');
       }
     };
+    const handleWindowFocus = () => fetchCards('global');
+    const handleOnline = () => fetchCards('global');
+    const handlePageShow = () => fetchCards('global');
+    // Fallback for flaky realtime connections between mobile/desktop clients.
+    const pollInterval = window.setInterval(() => fetchCards('global'), 30000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('pageshow', handlePageShow);
 
     // Sync with App.tsx modal actions (delete/update dispatch events)
     const handleCardChange = () => fetchCards('global');
@@ -132,8 +164,12 @@ export const useCards = (_boardId: string | null) => {
     return () => {
       supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('card:deleted', handleCardChange);
       window.removeEventListener('card:updated', handleCardChange);
+      window.clearInterval(pollInterval);
     };
   }, [fetchCards]);
 

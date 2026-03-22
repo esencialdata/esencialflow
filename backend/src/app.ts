@@ -486,6 +486,67 @@ const fromFirestoreTimestamp = (value: any): Date | null => {
   return null;
 };
 
+type CardStatusValue = 'pending' | 'completed' | 'blocked';
+
+const normalizeCardStatus = (value: unknown): CardStatusValue | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'pending' || normalized === 'completed' || normalized === 'blocked') {
+    return normalized as CardStatusValue;
+  }
+  return undefined;
+};
+
+const deriveStatusFromCompleted = (completed: unknown): CardStatusValue => (completed ? 'completed' : 'pending');
+
+const hasOwn = (obj: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(obj, key);
+
+const syncCardStateFields = (input: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = { ...input };
+  const hasCompleted = hasOwn(out, 'completed');
+  const hasStatus = hasOwn(out, 'status');
+  const normalizedStatus = normalizeCardStatus(out.status);
+
+  if (hasCompleted) {
+    out.completed = Boolean(out.completed);
+    if (!hasStatus) {
+      out.status = deriveStatusFromCompleted(out.completed);
+    }
+  }
+
+  if (hasStatus) {
+    out.status = normalizedStatus ?? deriveStatusFromCompleted(out.completed);
+    if (!hasCompleted) {
+      out.completed = out.status === 'completed';
+    }
+  }
+
+  if (!hasCompleted && !hasStatus) {
+    out.completed = false;
+    out.status = 'pending';
+  }
+
+  if (out.completed === true && !hasOwn(out, 'completedAt')) {
+    out.completedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (out.completed === false && !hasOwn(out, 'completedAt')) {
+    out.completedAt = null;
+  }
+
+  return out;
+};
+
+const normalizeCardRecord = (card: Record<string, unknown>): Record<string, unknown> => {
+  const normalizedStatus = normalizeCardStatus(card.status) ?? deriveStatusFromCompleted(card.completed);
+  const completed = normalizedStatus === 'completed' || Boolean(card.completed);
+  return {
+    ...card,
+    status: normalizedStatus,
+    completed,
+  };
+};
+
 // Users API
 app.get('/api/users', async (req, res) => {
   try {
@@ -1189,7 +1250,7 @@ app.get('/api/cards', async (req, res) => {
   try {
     const cardsRef = db.collection('cards');
     const snapshot = await cardsRef.get();
-    const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const cards = snapshot.docs.map(doc => normalizeCardRecord({ id: doc.id, ...doc.data() }));
     res.json(cards);
   } catch (error) {
     console.error("Error fetching cards:", error);
@@ -1211,7 +1272,7 @@ app.get('/api/cards/today', async (req, res) => {
       .where('dueDate', '<', tomorrow)
       .get();
 
-    const todayCards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const todayCards = snapshot.docs.map(doc => normalizeCardRecord({ id: doc.id, ...doc.data() }));
     res.json(todayCards);
   } catch (error) {
     console.error("Error fetching today's cards:", error);
@@ -1242,7 +1303,7 @@ app.get('/api/cards/search', async (req, res) => {
       .where('dueDate', '<', endTimestamp)
       .get();
 
-    let cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let cards = snapshot.docs.map(doc => normalizeCardRecord({ id: doc.id, ...doc.data() }));
     const filterUserId = (typeof userId === 'string' && userId.trim()) || getUserIdFromRequest(authedReq);
     if (filterUserId) {
       cards = cards.filter((c: any) => c.assignedToUserId === filterUserId);
@@ -1259,7 +1320,7 @@ app.get('/api/lists/:listId/cards', async (req, res) => {
     const { listId } = req.params;
     const cardsRef = db.collection('cards').where('listId', '==', listId);
     const snapshot = await cardsRef.get();
-    const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const cards = snapshot.docs.map(doc => normalizeCardRecord({ id: doc.id, ...doc.data() }));
     res.json(cards);
   } catch (error) {
     console.error("Error fetching cards for list:", error);
@@ -1274,7 +1335,8 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
   }
   try {
     const { listId } = req.params;
-    const incoming = { ...req.body } as any;
+    let incoming = { ...req.body } as any;
+    incoming = syncCardStateFields(incoming);
     if (incoming.dueDate) {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;
@@ -1298,7 +1360,7 @@ app.post('/api/lists/:listId/cards', async (req, res) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     const docRef = await db.collection('cards').add(newCardData);
-    const newCard = { id: docRef.id, ...newCardData };
+    const newCard = normalizeCardRecord({ id: docRef.id, ...newCardData });
     res.status(201).json(newCard);
 
     // Trigger webhooks for card_created event
@@ -1336,7 +1398,8 @@ app.put('/api/cards/:cardId', async (req, res) => {
   }
   try {
     const { cardId } = req.params;
-    const incoming = { ...req.body } as any;
+    let incoming = { ...req.body } as any;
+    incoming = syncCardStateFields(incoming);
     if (incoming.dueDate) {
       const ts = toTimestamp(incoming.dueDate);
       if (ts) incoming.dueDate = ts;
@@ -1350,7 +1413,7 @@ app.put('/api/cards/:cardId', async (req, res) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     await db.collection('cards').doc(cardId).update(updatedCardData);
-    res.json({ id: cardId, ...updatedCardData });
+    res.json(normalizeCardRecord({ id: cardId, ...updatedCardData }));
   } catch (error) {
     console.error("Error updating card:", error);
     res.status(500).json({ message: "Error updating card" });
@@ -1364,7 +1427,8 @@ app.patch('/api/cards/:cardId', async (req, res) => {
   }
   try {
     const { cardId } = req.params;
-    const incoming = { ...req.body } as any;
+    let incoming = { ...req.body } as any;
+    incoming = syncCardStateFields(incoming);
 
     // Handle incrementing actualTime
     if (incoming.incrementActualTime) {
@@ -1417,7 +1481,7 @@ app.patch('/api/cards/:cardId', async (req, res) => {
     }
 
     await db.collection('cards').doc(cardId).update(updatedFields);
-    res.json({ id: cardId, ...updatedFields });
+    res.json(normalizeCardRecord({ id: cardId, ...updatedFields }));
   } catch (error) {
     console.error("Error patching card:", error);
     res.status(500).json({ message: "Error patching card" });
@@ -1633,18 +1697,16 @@ app.get('/api/focus/next', async (req, res) => {
   }
 
   try {
-    // Fetch meaningful cards (not done, not archived)
-    // Since Firestore filtering is limited, we might need to fetch a bit more or rely on client-side logic? 
-    // Ideally we query by status. But our schema uses 'completed' boolean.
-
-    // Strategy: Query active cards for this user (assignedTo)
+    // Fetch cards for the user and normalize state fields in memory.
+    // This prevents missing tasks when legacy records only have one of:
+    // completed (boolean) or status (pending/completed/blocked).
     const snapshot = await db.collection('cards')
       .where('assignedToUserId', '==', userId)
-      .where('completed', '==', false)
-      .where('archived', '==', false)
       .get();
 
-    const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+    const cards = snapshot.docs
+      .map(doc => normalizeCardRecord({ id: doc.id, ...doc.data() }) as any)
+      .filter((card: any) => !card.archived && !card.completed) as any[];
 
     if (cards.length === 0) {
       return res.json({ message: 'No tasks available', task: null });
