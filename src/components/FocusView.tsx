@@ -138,7 +138,15 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   const handleToggleComplete = async (card: Card) => {
     try {
-      await handleUpdateCard(card.id, { completed: !card.completed });
+      const willComplete = !card.completed;
+      await handleUpdateCard(card.id, {
+        completed: willComplete,
+        completedAt: willComplete ? new Date() : null as any,
+      });
+      if (willComplete && activeCard?.id === card.id) {
+        await stop();
+        setActiveCard(null);
+      }
     } catch (err) {
       console.error('Failed to toggle complete', err);
       showToast('No se pudo actualizar el estado de la tarea', 'error');
@@ -175,6 +183,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         const delta = (data.energy_delta || 0) > 0 ? `+${data.energy_delta}` : `${data.energy_delta}`;
         showToast(`Tarea completada ✓  Energía: ${delta} → ${data.new_energy}/10`, 'success', 4000);
         if (data.new_energy !== undefined) setCurrentEnergy(data.new_energy);
+      }
+
+      if (activeCard?.id === card.id) {
+        await stop();
+        setActiveCard(null);
       }
 
       // Refresh board
