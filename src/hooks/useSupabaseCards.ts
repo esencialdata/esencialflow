@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '../types/data';
 import { useToast } from '../context/ToastContext';
 import { supabase } from '../config/supabase';
@@ -85,14 +85,38 @@ const toSupabaseDate = (date: any) => {
   return date;
 };
 
+const buildCardsSignature = (cards: Card[]): string => JSON.stringify(
+  cards
+    .map(card => ({
+      id: card.id,
+      title: card.title,
+      description: card.description || '',
+      listId: card.listId,
+      priority: card.priority,
+      status: card.status || '',
+      score: card.score ?? null,
+      projectId: card.projectId || '',
+      utilityDomain: card.utilityDomain || '',
+      position: card.position ?? 0,
+      dueDate: card.dueDate ? new Date(card.dueDate).toISOString() : '',
+      completed: Boolean(card.completed),
+      archived: Boolean(card.archived),
+      updatedAt: card.updatedAt ? new Date(card.updatedAt).toISOString() : '',
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id))
+);
+
 export const useCards = (_boardId: string | null) => {
   const [cardsByList, setCardsByList] = useState<Record<string, Card[]>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const cardsSignatureRef = useRef<string>('');
+  const hasLoadedRef = useRef(false);
 
-  const fetchCards = useCallback(async (_id: string) => {
-    setIsLoading(true);
+  const fetchCards = useCallback(async (_id: string, options?: { showLoading?: boolean }) => {
+    const shouldShowLoading = options?.showLoading ?? !hasLoadedRef.current;
+    if (shouldShowLoading) setIsLoading(true);
     try {
       // Fetch all non-archived cards
       const { data, error } = await supabase
@@ -119,26 +143,31 @@ export const useCards = (_boardId: string | null) => {
         groupedCards[listId].sort((a, b) => (a.position || 0) - (b.position || 0));
       });
 
-      setCardsByList(groupedCards);
+      const nextSignature = buildCardsSignature(formattedCards);
+      if (nextSignature !== cardsSignatureRef.current) {
+        cardsSignatureRef.current = nextSignature;
+        setCardsByList(groupedCards);
+      }
+      hasLoadedRef.current = true;
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch cards');
       console.error(err);
     } finally {
-      setIsLoading(false);
+      if (shouldShowLoading) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     // Initial fetch (we ignore boardId for now as we have a single cards table)
-    fetchCards('global');
+    fetchCards('global', { showLoading: true });
 
     // Subscribe to realtime changes
     const channel = supabase
       .channel('public:cards')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, (payload) => {
         console.log('🔔 Realtime event received:', payload.eventType, payload);
-        fetchCards('global');
+        fetchCards('global', { showLoading: false });
       })
       .subscribe((status) => {
         console.log('📡 Realtime subscription status:', status);
@@ -149,21 +178,21 @@ export const useCards = (_boardId: string | null) => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log('👁️ App visible again — refreshing cards');
-        fetchCards('global');
+        fetchCards('global', { showLoading: false });
       }
     };
-    const handleWindowFocus = () => fetchCards('global');
-    const handleOnline = () => fetchCards('global');
-    const handlePageShow = () => fetchCards('global');
+    const handleWindowFocus = () => fetchCards('global', { showLoading: false });
+    const handleOnline = () => fetchCards('global', { showLoading: false });
+    const handlePageShow = () => fetchCards('global', { showLoading: false });
     // Fallback for flaky realtime connections between mobile/desktop clients.
-    const pollInterval = window.setInterval(() => fetchCards('global'), 30000);
+    const pollInterval = window.setInterval(() => fetchCards('global', { showLoading: false }), 30000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('online', handleOnline);
     window.addEventListener('pageshow', handlePageShow);
 
     // Sync with App.tsx modal actions (delete/update dispatch events)
-    const handleCardChange = () => fetchCards('global');
+    const handleCardChange = () => fetchCards('global', { showLoading: false });
     window.addEventListener('card:deleted', handleCardChange);
     window.addEventListener('card:updated', handleCardChange);
 
