@@ -7,8 +7,7 @@ import QueueModal from './QueueModal';
 import SmartDescription from './SmartDescription';
 import { useToast } from '../context/ToastContext';
 import { supabase, supabaseKey } from '../config/supabase';
-import { selectQuoteForToday } from '../utils/quotes';
-import { extractProjectId, extractScore, getPrioritySignals, sortByLifeUtility } from '../utils/prioritization';
+import { extractProjectId, getPrioritySignals, sortByLifeUtility } from '../utils/prioritization';
 import HabitsModal from './HabitsModal';
 import './FocusView.css';
 
@@ -52,7 +51,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
   const [isListening, setIsListening] = useState(false);
   const [currentEnergy, setCurrentEnergy] = useState<number | null>(null);
   const [isCompletingTask, setIsCompletingTask] = useState(false);
-  const dailyQuote = useMemo(() => selectQuoteForToday(), []);
 
   // Audio recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -206,7 +204,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
       }
       const data = await res.json();
 
-      let toastMsg = `Tarea procesada. Score: S/${data.score}`;
+      let toastMsg = 'Tarea priorizada';
       if (data.is_sleep_blocked) toastMsg += ' (Bloqueada por sueño)';
       if (data.is_energy_blocked) toastMsg += ' [Baja Energía - Bloqueada]';
 
@@ -346,7 +344,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   // Render variables for current relevant card
   const displayCard = hasActiveCard ? activeCard : heroCard;
-  const score = displayCard ? extractScore(displayCard) : 0;
   const project = displayCard ? extractProjectId(displayCard) : null;
   const prioritySignals = displayCard ? getPrioritySignals(displayCard) : null;
 
@@ -404,24 +401,9 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           onTouchStart={() => handlePressStart(actualHero)}
           onTouchEnd={handlePressEnd}
         >
-          {score > 0 && (
-            <div className="focus-hero__score" title="Score Calculado">
-              S/{score}
-            </div>
-          )}
-
-          {!hasActiveCard && (
-            <div className="focus-hero__daily-quote">
-              <p>&ldquo;{dailyQuote.text}&rdquo;</p>
-              <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
-            </div>
-          )}
-
-          {project ? (
-            <span className="focus-hero__project">{project}</span>
-          ) : (
-            <span className="focus-hero__project focus-hero__project--invisible">PRJ-NONE</span>
-          )}
+          <span className="focus-hero__project">
+            {prioritySignals?.utilityLabel || project || 'Siguiente tarea'}
+          </span>
 
           <h1 className="focus-hero__title">{actualHero.title}</h1>
 
@@ -492,9 +474,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           </div>
 
           <div className="focus-hero__meta">
-            <span>Siguiente en cola: {sortedQueue.length - 1 > 0 ? sortedQueue.length - 1 : 0}</span>
-            <span>Urgencia: {actualHero?.priority === 'high' ? 'Crítica' : actualHero?.priority === 'medium' ? 'Alta' : 'Normal'}</span>
-            {prioritySignals?.utilityLabel && <span>Utilidad: {prioritySignals.utilityLabel}</span>}
             {currentEnergy !== null && (
               <span className="focus-hero__energy" title="Nivel de energía actual">
                 ⚡ {currentEnergy}/10
@@ -523,21 +502,13 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
         </section>
       ) : isSleepBlock ? (
         <section className="focus-empty">
-          <div className="focus-hero__daily-quote" style={{ marginBottom: '2rem' }}>
-            <p>&ldquo;{dailyQuote.text}&rdquo;</p>
-            <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
-          </div>
-          <h2>Bloque de Sueño Activo</h2>
-          <p>La ejecución radical está bloqueada (21:00 - 05:00). Desconecta y recarga energía.</p>
+          <h2>Descanso activo</h2>
+          <p>No hay ejecución entre 21:00 y 05:00. Vuelve mañana con energía.</p>
         </section>
       ) : (
         <section className="focus-empty">
-          <div className="focus-hero__daily-quote" style={{ marginBottom: '2rem' }}>
-            <p>&ldquo;{dailyQuote.text}&rdquo;</p>
-            <span className="focus-hero__quote-author">— {dailyQuote.author}</span>
-          </div>
           <h2>Todo limpio</h2>
-          <p>No hay tareas P0 (Score &gt;= 90). Refina tus prioridades o planifica la estrategia global.</p>
+          <p>No hay tareas activas. Captura una nueva tarea para priorizarla.</p>
         </section>
       )}
 

@@ -66,8 +66,8 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                 .queue-modal-overlay {
                     position: fixed;
                     top: 0; left: 0; right: 0; bottom: 0;
-                    background: rgba(0, 0, 0, 0.85);
-                    backdrop-filter: blur(5px);
+                    background: rgba(0, 0, 0, 0.24);
+                    backdrop-filter: blur(18px);
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -75,35 +75,42 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                     animation: fadeIn 0.2s;
                 }
                 .queue-modal-content {
-                    background: #1e293b;
-                    border: 1px solid #334155;
-                    border-radius: 12px;
+                    background: rgba(255, 255, 255, 0.82);
+                    border: 1px solid rgba(255, 255, 255, 0.72);
+                    border-radius: 28px;
                     width: 90%;
-                    max-width: 600px;
+                    max-width: 720px;
                     max-height: 80vh;
                     display: flex;
                     flex-direction: column;
-                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+                    backdrop-filter: blur(28px) saturate(1.18);
+                    -webkit-backdrop-filter: blur(28px) saturate(1.18);
+                    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.14);
                 }
                 .queue-header {
-                    padding: 1.5rem;
-                    border-bottom: 1px solid #334155;
+                    padding: 1.15rem 1.25rem;
+                    border-bottom: 1px solid var(--color-border-light);
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
                 }
                 .queue-header h2 {
                     margin: 0;
-                    font-size: 1.25rem;
-                    color: #f8fafc;
+                    font-size: 1.35rem;
+                    color: var(--color-text);
+                    font-weight: 900;
                 }
                 .close-btn {
                     background: none;
-                    border: none;
-                    color: #94a3b8;
+                    border: 1px solid var(--color-border-light);
+                    color: var(--color-text);
                     font-size: 2rem;
                     line-height: 1;
                     cursor: pointer;
+                    border-radius: 999px;
+                    width: 40px;
+                    height: 40px;
+                    padding: 0;
                 }
                 .queue-list {
                     padding: 1rem;
@@ -116,14 +123,15 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    padding: 0.75rem;
-                    background: #0f172a;
-                    border-radius: 8px;
-                    border: 1px solid transparent;
-                    transition: border-color 0.2s;
+                    padding: 0.9rem;
+                    background: transparent;
+                    border-radius: 16px;
+                    border: 1px solid var(--color-border-light);
+                    transition: border-color 0.2s, background 0.2s;
                 }
                 .queue-item:hover {
-                    border-color: #334155;
+                    border-color: var(--color-border-light);
+                    background: rgba(242, 242, 247, 0.86);
                 }
                 .queue-item-left {
                     display: flex;
@@ -133,7 +141,7 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                     min-width: 0;
                 }
                 .queue-index {
-                    color: #475569;
+                    color: var(--color-text-muted);
                     font-family: monospace;
                     font-size: 0.9rem;
                     min-width: 24px;
@@ -141,24 +149,25 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                 .check-circle {
                     width: 20px;
                     height: 20px;
-                    border-radius: 50%;
-                    border: 2px solid #475569;
+                    border-radius: 999px;
+                    border: 1px solid var(--color-border-light);
                     background: transparent;
                     cursor: pointer;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     padding: 0;
-                    color: white;
+                    color: var(--color-text);
                     font-size: 12px;
                     flex-shrink: 0;
                 }
                 .check-circle:hover {
-                    border-color: #94a3b8;
+                    background: var(--color-surface-2);
                 }
                 .check-circle.completed {
-                    background: #22c55e;
-                    border-color: #22c55e;
+                    background: var(--color-accent-green);
+                    border-color: var(--color-accent-green);
+                    color: #fff;
                 }
                 .queue-item-details {
                     display: flex;
@@ -169,59 +178,84 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                     flex: 1;
                 }
                 .queue-item-details:hover h3 {
-                    color: #fff;
+                    color: var(--color-text);
                     text-decoration: underline;
-                    text-decoration-color: rgba(255,255,255,0.3);
+                    text-decoration-color: var(--color-border);
                 }
                 .tags-row {
-                    display: flex; gap: 6px;
+                    display: flex; gap: 6px; flex-wrap: wrap;
                 }
                 .queue-item-details h3 {
                     margin: 0;
-                    font-size: 0.95rem;
-                    color: #e2e8f0;
+                    font-size: 1rem;
+                    color: var(--color-text);
+                    font-weight: 800;
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
                 .completed-text {
                     text-decoration: line-through;
-                    color: #64748b;
+                    color: var(--color-text-muted);
                 }
                 .tag {
                     font-size: 0.7rem;
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    background: #334155;
-                    color: #cbd5e1;
+                    padding: 3px 6px;
+                    border-radius: 999px;
+                    border: 1px solid var(--color-border-light);
+                    background: transparent;
+                    color: var(--color-text-muted);
                     width: fit-content;
+                    font-weight: 800;
                 }
                 .tag.high {
-                    background: rgba(239, 68, 68, 0.2);
-                    color: #fca5a5;
+                    border-color: var(--color-accent-red);
+                    color: var(--color-accent-red);
                 }
                 .tag.score {
-                    background: rgba(59, 130, 246, 0.18);
-                    color: #93c5fd;
+                    border-color: var(--color-border-light);
+                    background: var(--color-accent-blue);
+                    color: #fff;
                 }
                 .jump-btn {
-                    padding: 4px 10px;
-                    font-size: 0.8rem;
-                    color: #3b82f6;
-                    background: rgba(59, 130, 246, 0.1);
-                    border: none;
-                    border-radius: 4px;
+                    padding: 8px 10px;
+                    font-size: 0.82rem;
+                    color: #fff;
+                    background: var(--color-accent-blue);
+                    border: 1px solid transparent;
+                    border-radius: 999px;
                     cursor: pointer;
                     white-space: nowrap;
                     margin-left: 0.5rem;
+                    font-weight: 800;
                 }
                 .jump-btn:hover {
-                    background: rgba(59, 130, 246, 0.2);
+                    background: #006ee6;
                 }
                 .empty-queue {
                     text-align: center;
-                    color: #64748b;
+                    color: var(--color-text-muted);
                     padding: 2rem;
+                }
+                @media (max-width: 640px) {
+                    .queue-modal-overlay { align-items: flex-end; }
+                    .queue-modal-content {
+                        width: 100%;
+                        max-height: 86vh;
+                        border-radius: 16px 16px 0 0;
+                        border-bottom: 0;
+                        box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.1);
+                    }
+                    .queue-item {
+                        align-items: flex-start;
+                        gap: 10px;
+                    }
+                    .queue-item-left {
+                        gap: 0.65rem;
+                    }
+                    .jump-btn {
+                        padding: 8px;
+                    }
                 }
                 @keyframes fadeIn {
                     from { opacity: 0; }
