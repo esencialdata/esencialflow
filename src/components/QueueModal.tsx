@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card } from '../types/data';
+import { getPrioritySignals } from '../utils/prioritization';
 
 interface QueueModalProps {
     isOpen: boolean;
@@ -25,7 +26,9 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                     {queue.length === 0 ? (
                         <p className="empty-queue">No hay más tareas. Eres libre.</p>
                     ) : (
-                        queue.map((card, index) => (
+                        queue.map((card, index) => {
+                            const signals = getPrioritySignals(card);
+                            return (
                             <div key={card.id} className="queue-item">
                                 <div className="queue-item-left">
                                     <span className="queue-index">#{index + 1}</span>
@@ -43,6 +46,8 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                                     >
                                         <h3 className={card.completed ? 'completed-text' : ''}>{card.title}</h3>
                                         <div className="tags-row">
+                                            <span className="tag score">S/{Math.round(signals.score)}</span>
+                                            {signals.label && <span className="tag">{signals.label}</span>}
                                             {card.priority === 'high' && <span className="tag high">Alta</span>}
                                             {card.dueDate && <span className="tag date">{new Date(card.dueDate).toLocaleDateString()}</span>}
                                         </div>
@@ -52,7 +57,7 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                                     Saltar aquí
                                 </button>
                             </div>
-                        ))
+                        )})
                     )}
                 </div>
             </div>
@@ -194,6 +199,10 @@ const QueueModal: React.FC<QueueModalProps> = ({ isOpen, onClose, queue, onJumpT
                 .tag.high {
                     background: rgba(239, 68, 68, 0.2);
                     color: #fca5a5;
+                }
+                .tag.score {
+                    background: rgba(59, 130, 246, 0.18);
+                    color: #93c5fd;
                 }
                 .jump-btn {
                     padding: 4px 10px;

@@ -8,6 +8,7 @@ import SmartDescription from './SmartDescription';
 import { useToast } from '../context/ToastContext';
 import { supabase, supabaseKey } from '../config/supabase';
 import { selectQuoteForToday } from '../utils/quotes';
+import { extractProjectId, extractScore, getPrioritySignals, sortByLifeUtility } from '../utils/prioritization';
 import HabitsModal from './HabitsModal';
 import './FocusView.css';
 
@@ -62,18 +63,6 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
 
 
-  const extractScore = (description?: string): number => {
-    if (!description) return 0;
-    const match = description.match(/Score\s+calculado:\s*([\d.]+)/i);
-    return match ? parseFloat(match[1]) : 0;
-  };
-
-  const extractProject = (description?: string): string | null => {
-    if (!description) return null;
-    const match = description.match(/(PRJ-[A-Z0-9]+)/i);
-    return match ? match[1].toUpperCase() : null;
-  };
-
   const handlePressStart = (card: Card | null) => {
     if (!card) return;
     longPressTimerRef.current = setTimeout(() => {
@@ -92,23 +81,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     if (!cards) return [];
 
     const active = Object.values(cards).flat().filter(card => !card.completed && !card.archived);
-
-    return active.sort((a, b) => {
-      if (a.priority === 'high' && b.priority !== 'high') return -1;
-      if (b.priority === 'high' && a.priority !== 'high') return 1;
-
-      const scoreA = extractScore(a.description);
-      const scoreB = extractScore(b.description);
-      if (scoreA !== scoreB) return scoreB - scoreA;
-
-      const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-      if (dueA !== dueB) return dueA - dueB;
-
-      const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return createdA - createdB;
-    });
+    return sortByLifeUtility(active);
   }, [cards]);
 
   const heroCard = sortedQueue.length > 0 ? sortedQueue[0] : null;
@@ -157,7 +130,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
     if (isCompletingTask) return;
     setIsCompletingTask(true);
     try {
-      const projectId = extractProject(card.description) || 'PRJ-NONE';
+      const projectId = extractProjectId(card) || 'PRJ-NONE';
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token || supabaseKey;
 
@@ -373,14 +346,11 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
 
   // Render variables for current relevant card
   const displayCard = hasActiveCard ? activeCard : heroCard;
-  const score = displayCard ? extractScore(displayCard.description) : 0;
-  const project = displayCard ? extractProject(displayCard.description) : null;
+  const score = displayCard ? extractScore(displayCard) : 0;
+  const project = displayCard ? extractProjectId(displayCard) : null;
+  const prioritySignals = displayCard ? getPrioritySignals(displayCard) : null;
 
-  // Enforce P0 rule for Radical Focus
-  const isP0 = score >= 90;
-
-  // If not P0 and not an active running card, heroCard vanishes in favor of "Todo limpio"
-  const actualHero = (displayCard && isP0) || hasActiveCard ? displayCard : null;
+  const actualHero = displayCard;
 
   // Circular logic
   const circleRadius = 110;
@@ -524,6 +494,7 @@ const FocusView: React.FC<FocusViewProps> = ({ boardId, onStartFocus, onEditCard
           <div className="focus-hero__meta">
             <span>Siguiente en cola: {sortedQueue.length - 1 > 0 ? sortedQueue.length - 1 : 0}</span>
             <span>Urgencia: {actualHero?.priority === 'high' ? 'Crítica' : actualHero?.priority === 'medium' ? 'Alta' : 'Normal'}</span>
+            {prioritySignals?.utilityLabel && <span>Utilidad: {prioritySignals.utilityLabel}</span>}
             {currentEnergy !== null && (
               <span className="focus-hero__energy" title="Nivel de energía actual">
                 ⚡ {currentEnergy}/10

@@ -20,8 +20,13 @@ const ENERGY_IMPACT: Record<string, number> = {
 const ENERGY_REQS: Record<string, number> = {
   'PRJ-MIGA': 9,
   'PRJ-VITAL': 1,
-  'PRJ-KUCHEN': 8,
-  'PRJ-QUAL': 7,
+  'PRJ-ESENCIAL': 7,
+  'PRJ-ES-KUCHEN': 8,
+  'PRJ-ES-QUINTA': 6,
+  'PRJ-ES-QUALISTER': 7,
+  'PRJ-ES-CHELITO': 5,
+  'PRJ-ESTUDIO': 6,
+  'PRJ-CREAMOS': 5,
 };
 
 serve(async (request) => {
@@ -108,6 +113,7 @@ serve(async (request) => {
       .from('cards')
       .select('*')
       .eq('status', 'pending')
+      .eq('completed', false)
       .is('due_date', null) // No tiene bloqueo de sueño activo
       .order('score', { ascending: false })
       .limit(10);

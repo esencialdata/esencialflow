@@ -62,8 +62,11 @@ export interface Card {
   title: string;
   description?: string;
   listId: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: 'backlog' | 'low' | 'medium' | 'high';
   status?: 'pending' | 'completed' | 'blocked';
+  score?: number;
+  projectId?: string;
+  utilityDomain?: 'money' | 'client_delivery' | 'own_product' | 'personal_growth' | 'idi_creamos' | 'health_energy' | 'admin';
   position?: number; // Orden dentro de la lista
   dueDate?: Date | string;
   completed?: boolean;

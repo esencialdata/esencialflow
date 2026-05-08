@@ -8,6 +8,7 @@ interface ListViewProps {
 }
 
 const PRIORITY_LABELS: Record<Card['priority'], string> = {
+  backlog: 'Backlog',
   low: 'Baja',
   medium: 'Media',
   high: 'Alta',

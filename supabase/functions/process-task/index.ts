@@ -65,15 +65,17 @@ serve(async (req) => {
     const systemInstruction = `
 Eres un extractor de metadatos de tareas. Tu única función es analizar el texto provisto y retornar EXCLUSIVAMENTE un objeto JSON con los siguientes campos:
 - f_impact: (Impacto Financiero: cuánto impacta directamente en ingresos o flujo de caja, del 1 al 100.
-  REGLA: cualquier tarea de cliente activo = mínimo 60, porque los clientes son fuente directa de ingresos.)
+  REGLA: cualquier tarea de cliente activo = mínimo 60, porque los clientes son fuente directa de ingresos.
+  REGLA: si la tarea puede generar dinero esta semana, asigna mínimo 80.)
 - leverage: (Apalancamiento: cuánto escala este trabajo o genera retorno futuro, del 1 al 100)
 - urgency: (Urgencia: cómo de urgente es en el tiempo, del 1 al 100)
 - vital_impact: (Impacto Vital: importancia para la SUPERVIVENCIA DEL SISTEMA, del 1 al 100.
-  REGLA DE EVALUACIÓN — asigna alto (≥70) si:
+	  REGLA DE EVALUACIÓN — asigna alto (≥70) si:
     * Impacta en salud personal, sueño o energía
     * Perder el cliente o entregable implicaría pérdida de flujo de caja
-    * Es parte de la misión personal o identidad del CEO
-  Asigna bajo (<40) solo si es tarea rutinaria sin consecuencias de pérdida.)
+	    * Es parte de la misión personal o identidad del CEO
+    * Es un compromiso semanal de Creamos Juntos / IDI
+	  Asigna bajo (<40) solo si es tarea rutinaria sin consecuencias de pérdida.)
 - energy_level: (Nivel de energía del USUARIO, del 1 al 10. Si no se menciona, retorna 10)
 - project_id: EXACTAMENTE uno de estos valores: "PRJ-MIGA", "PRJ-ESENCIAL", "PRJ-ES-KUCHEN", "PRJ-ES-QUINTA", "PRJ-ES-QUALISTER", "PRJ-ES-CHELITO", "PRJ-ESTUDIO", "PRJ-CREAMOS", "PRJ-VITAL", "PRJ-NONE"
   Reglas de asignación de project_id (en orden de prioridad, usar el PRIMERO que aplique):
@@ -87,8 +89,22 @@ Eres un extractor de metadatos de tareas. Tu única función es analizar el text
    * "PRJ-ESTUDIO"      → Coursera, estudio, certificación, curso, aprendizaje, UX research.
    * "PRJ-CREAMOS"      → Creamos Juntos, contenido, podcast, video, post, redes sociales, marca personal.
    * "PRJ-NONE"         → solo si NO encaja en ninguna de las anteriores.
+- utility_domain: EXACTAMENTE uno de estos valores: "money", "client_delivery", "own_product", "personal_growth", "idi_creamos", "health_energy", "admin"
+	  Reglas de asignación:
+   * "money"            → ingresos directos, flujo de caja, ventas, leads, propuestas comerciales.
+   * "client_delivery"  → entregables, soporte o trabajo operativo para clientes activos.
+   * "own_product"      → MIGA, SaaS, MVP, producto propio o activos escalables propios.
+   * "personal_growth"  → estudio, certificaciones, aprendizaje, desarrollo de capacidades.
+	   * "idi_creamos"      → IDI, Creamos Juntos, podcast, contenido, marca personal, comunidad. Es compromiso semanal.
+   * "health_energy"    → sueño, salud, ejercicio, recuperación, energía.
+   * "admin"            → mantenimiento, coordinación o tareas necesarias sin retorno estratégico claro.
 - title: un título conciso en formato 'Verbo Infinitivo + Objeto'. Máximo 7 palabras.
 - estimated_time: tiempo estimado en minutos (default 25).
+Reglas personales de priorización:
+- Si algo genera dinero esta semana, sube prioridad: f_impact mínimo 80 y urgency mínimo 70.
+- Si afecta a cliente activo, no puede caer demasiado: f_impact mínimo 60, vital_impact mínimo 60 y utility_domain "client_delivery".
+- Si el usuario está bajo de energía, priorizar recuperación: project_id "PRJ-VITAL", utility_domain "health_energy".
+- Creamos Juntos / IDI importa porque es un compromiso semanal: project_id "PRJ-CREAMOS", utility_domain "idi_creamos", urgency mínimo 65 y vital_impact mínimo 60.
 ${timeBlockHint}
 RESPONDE ÚNICAMENTE con el objeto JSON. No incluyas explicaciones ni texto adicional.
 ${strategyContext}
@@ -134,6 +150,41 @@ ${strategyContext}
       parsedData.leverage = 100;
       parsedData.urgency = 80;
       parsedData.vital_impact = 100;
+      parsedData.utility_domain = 'health_energy';
+    }
+
+    const rawTextForRules = String(input_text || '').toLowerCase();
+    const mentionsClientWork = [
+      'cliente', 'kuchen', 'qualister', 'quinta', 'chelito', 'entregable', 'reunión cliente', 'reunion cliente'
+    ].some(term => rawTextForRules.includes(term));
+    const mentionsMoneyThisWeek = [
+      'esta semana', 'cobrar', 'venta', 'ventas', 'ingreso', 'ingresos', 'flujo de caja', 'propuesta', 'lead', 'cliente nuevo', 'factura'
+    ].some(term => rawTextForRules.includes(term));
+    const mentionsCreamos = [
+      'creamos juntos', 'creamos', 'idi', 'podcast', 'episodio', 'contenido semanal'
+    ].some(term => rawTextForRules.includes(term));
+
+    if (mentionsClientWork) {
+      parsedData.f_impact = Math.max(Number(parsedData.f_impact || 0), 60);
+      parsedData.vital_impact = Math.max(Number(parsedData.vital_impact || 0), 60);
+      if (!parsedData.utility_domain || parsedData.utility_domain === 'admin') {
+        parsedData.utility_domain = 'client_delivery';
+      }
+    }
+
+    if (mentionsMoneyThisWeek) {
+      parsedData.f_impact = Math.max(Number(parsedData.f_impact || 0), 80);
+      parsedData.urgency = Math.max(Number(parsedData.urgency || 0), 70);
+      if (!parsedData.utility_domain || parsedData.utility_domain === 'admin') {
+        parsedData.utility_domain = 'money';
+      }
+    }
+
+    if (mentionsCreamos) {
+      parsedData.project_id = 'PRJ-CREAMOS';
+      parsedData.utility_domain = 'idi_creamos';
+      parsedData.urgency = Math.max(Number(parsedData.urgency || 0), 65);
+      parsedData.vital_impact = Math.max(Number(parsedData.vital_impact || 0), 60);
     }
 
     const pF = parsedData.f_impact || 0;
@@ -141,6 +192,7 @@ ${strategyContext}
     const pU = parsedData.urgency || 0;
     const pV = parsedData.vital_impact || 0;
     const projectId = parsedData.project_id || 'PRJ-NONE';
+    const utilityDomain = parsedData.utility_domain || 'admin';
     const title = parsedData.title || 'Nueva Tarea Obtenida';
 
     // ─── LOOKUP en tabla projects (Estrategia v9) ──────────────────────────
@@ -242,7 +294,7 @@ ${strategyContext}
     }
 
     const strategicReviewFlag = needsStrategicReview ? '\n⚠️ Revisión Estratégica Pendiente: proyecto no reconocido en Estrategia v9.' : '';
-    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${energyReq}, Mult: ${mult}x)${strategicReviewFlag}\n\nOriginal: ${input_text}`;
+    const formattedDescription = `[AI Generated]\nProject: ${projectId}\nUtility: ${utilityDomain}\nScore calculado: ${finalScore}\n(Fin: ${pF}, Apal: ${pA}, Urg: ${pU}, Vit: ${pV}, Energía: ${energy}, Req: ${energyReq}, Mult: ${mult}x)${strategicReviewFlag}\n\nOriginal: ${input_text}`;
 
     // 6. Save directly to Supabase Public Cards table
     const newCardData = {
@@ -251,10 +303,13 @@ ${strategyContext}
       list_id: isEnergyBlocked ? 'queue' : 'inbox', 
       priority: finalScore >= 90 ? 'high' : finalScore >= 75 ? 'medium' : finalScore >= 50 ? 'low' : 'backlog',
       due_date: isSleepBlock ? dueDate : null,
-      status: isEnergyBlocked ? 'BLOCKED_BY_ENERGY' : 'PENDING',
+      status: isEnergyBlocked ? 'blocked' : 'pending',
       assigned_to_user_id: user_id, // ensure user_id is coming from JWT theoretically if using supabase auth 
       estimated_time: parsedData.estimated_time || 25,
       actual_time: 0,
+      score: finalScore,
+      project_id: projectId,
+      utility_domain: utilityDomain,
     };
 
     const { data: savedCard, error: supaErr } = await supabase
@@ -275,6 +330,7 @@ ${strategyContext}
       is_p0: finalScore >= 90,
       priority: savedCard.priority,
       project_id: projectId,
+      utility_domain: utilityDomain,
       is_sleep_blocked: isSleepBlock,
       is_energy_blocked: isEnergyBlocked,
       card_id: savedCard.id,

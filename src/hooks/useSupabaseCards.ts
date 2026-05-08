@@ -24,6 +24,9 @@ const mapFromSupabase = (record: any): Card => ({
   description: record.description,
   listId: record.list_id,
   priority: record.priority,
+  score: typeof record.score === 'number' ? record.score : undefined,
+  projectId: record.project_id,
+  utilityDomain: record.utility_domain,
   position: record.position,
   dueDate: record.due_date ? new Date(record.due_date) : undefined,
   completed: normalizeStatus(record.status) === 'completed' || Boolean(record.completed),
@@ -48,6 +51,9 @@ const mapToSupabase = (card: Partial<Card>): any => {
   if (card.description !== undefined) payload.description = card.description;
   if (card.listId !== undefined) payload.list_id = card.listId;
   if (card.priority !== undefined) payload.priority = card.priority;
+  if (card.score !== undefined) payload.score = card.score;
+  if (card.projectId !== undefined) payload.project_id = card.projectId;
+  if (card.utilityDomain !== undefined) payload.utility_domain = card.utilityDomain;
   if (card.position !== undefined) payload.position = card.position;
   if (card.dueDate !== undefined) payload.due_date = toSupabaseDate(card.dueDate);
   if (normalizedStatus !== undefined) payload.status = normalizedStatus;

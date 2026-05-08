@@ -22,6 +22,7 @@ interface CardProps {
 }
 
 const PRIORITY_LABELS: Record<CardType['priority'], string> = {
+  backlog: 'Backlog',
   low: 'Baja',
   medium: 'Media',
   high: 'Alta',
