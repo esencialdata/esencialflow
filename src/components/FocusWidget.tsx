@@ -39,15 +39,9 @@ const FocusWidget: React.FC<{ onOpen?: () => void }> = ({ onOpen }) => {
     });
   }, []);
 
-  const togglePiP = useCallback(async () => {
-    // If PiP is active, close it
-    if (pipWindow) {
-      pipWindow.close();
-      setPipWindow(null);
-      return;
-    }
+  const openPiP = useCallback(async (compact = collapsed) => {
+    if (pipWindow) return;
 
-    // Check availability
     if (!('documentPictureInPicture' in window)) {
       showToast('Tu navegador no soporta ventanas flotantes (PiP). Prueba Chrome o Edge actualizados.', 'error');
       return;
@@ -57,34 +51,52 @@ const FocusWidget: React.FC<{ onOpen?: () => void }> = ({ onOpen }) => {
       // Request new window
       const dpip = (window as any).documentPictureInPicture;
       const win = await dpip.requestWindow({
-        width: collapsed ? 200 : 220,
-        height: collapsed ? 50 : 120,
+        width: 240,
+        height: compact ? 64 : 136,
       });
 
-      // Copy styles
       copyStyles(document, win.document);
 
-      // Apply basic styles to the PiP window body to ensure no margins, dark theme, and centered content
+      win.document.documentElement.style.background = 'transparent';
       win.document.body.style.margin = '0';
-      win.document.body.style.backgroundColor = '#0f172a';
+      win.document.body.style.background = 'transparent';
       win.document.body.style.display = 'flex';
       win.document.body.style.alignItems = 'center';
       win.document.body.style.justifyContent = 'center';
       win.document.body.style.height = '100vh';
       win.document.body.style.boxSizing = 'border-box';
 
-      // Handle close
       win.addEventListener('pagehide', () => {
         setPipWindow(null);
       });
 
-      // Set state
       setPipWindow(win);
     } catch (err) {
       console.error('Failed to open PiP window:', err);
       showToast('No se pudo abrir la ventana flotante.', 'error');
     }
   }, [pipWindow, collapsed, copyStyles, showToast]);
+
+  const togglePiP = useCallback(async () => {
+    if (pipWindow) {
+      pipWindow.close();
+      setPipWindow(null);
+      return;
+    }
+
+    await openPiP();
+  }, [pipWindow, openPiP]);
+
+  useEffect(() => {
+    const handleOpenPip = () => {
+      setHidden(false);
+      setCollapsed(true);
+      void openPiP(true);
+    };
+
+    window.addEventListener('focus-widget:open-pip', handleOpenPip);
+    return () => window.removeEventListener('focus-widget:open-pip', handleOpenPip);
+  }, [openPiP]);
 
   // Also close pip if widget is hidden explicitly or component unmounts
   useEffect(() => {
@@ -107,7 +119,7 @@ const FocusWidget: React.FC<{ onOpen?: () => void }> = ({ onOpen }) => {
             className="fw-pip"
             onClick={togglePiP}
             title={pipWindow ? "Volver a la pestaña" : "Ventana Flotante"}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '14px' }}
+            aria-label={pipWindow ? "Volver a la pestaña" : "Abrir ventana flotante"}
           >
             {pipWindow ? '↲' : '❐'}
           </button>

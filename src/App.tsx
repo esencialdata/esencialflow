@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import FocusView from './components/FocusView';
+import FocusWidget from './components/FocusWidget';
 import EditCardModal from './components/EditCardModal';
 import { useBoards } from './hooks/useBoards';
 import { useCards } from './hooks/useSupabaseCards';
@@ -82,7 +83,9 @@ function App() {
 
   const handleStartFocus = (card: Card) => {
     setFocusCard(card);
-    void startPomodoro(card).catch(() => {
+    const startPromise = startPomodoro(card);
+    window.dispatchEvent(new CustomEvent('focus-widget:open-pip'));
+    void startPromise.catch(() => {
       showToast('No se pudo iniciar el temporizador', 'error');
     });
   };
@@ -200,6 +203,7 @@ function App() {
       />
 
       <ToastContainer />
+      <FocusWidget />
     </div>
   );
 }
